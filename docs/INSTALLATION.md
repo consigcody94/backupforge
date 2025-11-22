@@ -39,18 +39,23 @@ source $HOME/.cargo/env
 **Ubuntu/Debian:**
 ```bash
 sudo apt update
-sudo apt install -y build-essential pkg-config libssl-dev git
+sudo apt install -y build-essential git
+# Note: OpenSSL is vendored, no libssl-dev needed!
 ```
 
 **RHEL/CentOS/Fedora:**
 ```bash
-sudo dnf install -y gcc pkg-config openssl-devel git
+sudo dnf install -y gcc git
+# Note: OpenSSL is vendored, no openssl-devel needed!
 ```
 
 **macOS:**
 ```bash
-brew install openssl pkg-config
+# No additional dependencies needed beyond Rust!
+# Note: OpenSSL is vendored
 ```
+
+> **Note:** BackupForge uses vendored OpenSSL, which means it compiles OpenSSL from source and bundles it with the application. You don't need to install system OpenSSL development libraries!
 
 #### 3. Clone and Build
 

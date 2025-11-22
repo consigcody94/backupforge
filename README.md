@@ -93,6 +93,8 @@ Built with Rust for maximum performance, security, and reliability.
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
+> **Note:** BackupForge uses vendored OpenSSL - no system OpenSSL libraries required! Just Rust and a C compiler.
+
 ### Installation
 
 1. Clone the repository:

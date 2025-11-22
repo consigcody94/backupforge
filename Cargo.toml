@@ -42,6 +42,9 @@ lz4 = "1.24"
 rusoto_core = "0.48"
 rusoto_s3 = "0.48"
 
+# OpenSSL - use vendored to avoid system dependency
+openssl = { version = "0.10", features = ["vendored"] }
+
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "postgres"] }
 
