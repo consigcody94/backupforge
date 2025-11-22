@@ -53,7 +53,7 @@ Feature requests are welcome! Please provide:
 ### Build
 
 ```bash
-git clone https://github.com/yourusername/backupforge.git
+git clone https://github.com/consigcody94/backupforge.git
 cd backupforge
 cargo build
 ```
@@ -250,8 +250,8 @@ Located in `docs/`:
 
 ## Questions?
 
-- Open a [Discussion](https://github.com/yourusername/backupforge/discussions)
-- Ask in [Issues](https://github.com/yourusername/backupforge/issues)
+- Open a [Discussion](https://github.com/consigcody94/backupforge/discussions)
+- Ask in [Issues](https://github.com/consigcody94/backupforge/issues)
 
 ## License
 

@@ -14,7 +14,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["BackupForge Contributors"]
 license = "Apache-2.0"
-repository = "https://github.com/yourusername/backupforge"
+repository = "https://github.com/consigcody94/backupforge"
 
 [workspace.dependencies]
 # Async runtime

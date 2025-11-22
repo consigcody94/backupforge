@@ -96,7 +96,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/backupforge.git
+git clone https://github.com/consigcody94/backupforge.git
 cd backupforge
 ```
 
@@ -360,8 +360,8 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for detai
 ## Support
 
 - Documentation: [docs/](docs/)
-- Issues: [GitHub Issues](https://github.com/yourusername/backupforge/issues)
-- Discussions: [GitHub Discussions](https://github.com/yourusername/backupforge/discussions)
+- Issues: [GitHub Issues](https://github.com/consigcody94/backupforge/issues)
+- Discussions: [GitHub Discussions](https://github.com/consigcody94/backupforge/discussions)
 
 ## Acknowledgments
 

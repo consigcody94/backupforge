@@ -55,7 +55,7 @@ brew install openssl pkg-config
 #### 3. Clone and Build
 
 ```bash
-git clone https://github.com/yourusername/backupforge.git
+git clone https://github.com/consigcody94/backupforge.git
 cd backupforge
 cargo build --release
 ```
@@ -83,7 +83,7 @@ cargo install backupforge-cli
 
 ### Method 3: Pre-built Binaries (Coming Soon)
 
-Download from [GitHub Releases](https://github.com/yourusername/backupforge/releases).
+Download from [GitHub Releases](https://github.com/consigcody94/backupforge/releases).
 
 ## Initial Configuration
 

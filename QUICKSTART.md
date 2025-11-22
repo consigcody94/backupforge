@@ -7,7 +7,7 @@ Get up and running with BackupForge in 5 minutes!
 ### Automated Setup
 
 ```bash
-git clone https://github.com/yourusername/backupforge.git
+git clone https://github.com/consigcody94/backupforge.git
 cd backupforge
 ./scripts/setup.sh
 ```
@@ -25,7 +25,7 @@ The setup script will:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Clone and build
-git clone https://github.com/yourusername/backupforge.git
+git clone https://github.com/consigcody94/backupforge.git
 cd backupforge
 cargo build --release
 
@@ -252,13 +252,13 @@ Reduce chunk size or use LZ4 compression instead of Zstd.
 - Read the [Full Documentation](README.md)
 - Explore [Advanced Features](docs/ADVANCED.md)
 - Check out the [API Reference](docs/API.md)
-- Join the community on [GitHub Discussions](https://github.com/yourusername/backupforge/discussions)
+- Join the community on [GitHub Discussions](https://github.com/consigcody94/backupforge/discussions)
 
 ## Need Help?
 
 - Documentation: [docs/](docs/)
-- Issues: [GitHub Issues](https://github.com/yourusername/backupforge/issues)
-- Discussions: [GitHub Discussions](https://github.com/yourusername/backupforge/discussions)
+- Issues: [GitHub Issues](https://github.com/consigcody94/backupforge/issues)
+- Discussions: [GitHub Discussions](https://github.com/consigcody94/backupforge/discussions)
 
 ## Tips
 
