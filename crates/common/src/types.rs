@@ -85,6 +85,15 @@ pub enum BackupSource {
     RemoteSSH { host: String, port: u16, user: String, path: String },
     ProxmoxVM { node: String, vmid: String },
     LXC { node: String, ctid: String },
+    DockerContainer { container_id: String },
+    DockerVolume { volume_name: String },
+    PostgreSQL { host: String, port: u16, database: String, username: String },
+    MySQL { host: String, port: u16, database: String, username: String },
+    MongoDB { host: String, port: u16, database: String },
+    Redis { host: String, port: u16 },
+    AWSEC2 { instance_id: String, region: String },
+    AzureVM { vm_name: String, resource_group: String },
+    GCPVM { instance_name: String, zone: String, project_id: String },
 }
 
 /// Backup statistics

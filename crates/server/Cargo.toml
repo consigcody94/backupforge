@@ -5,6 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "backupforge-server"
+path = "src/main.rs"
+
 [dependencies]
 backupforge-common = { path = "../common" }
 backupforge-core = { path = "../core" }

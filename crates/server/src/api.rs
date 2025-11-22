@@ -44,7 +44,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/tenants/:id", get(handlers::tenants::get_tenant))
 
         // Static files for web dashboard
-        .nest_service("/", tower_http::services::ServeDir::new("web-dashboard/dist"))
+        .nest_service("/", tower_http::services::ServeDir::new("web-dashboard")
+            .append_index_html_on_directories(true))
 
         .layer(cors)
         .layer(TraceLayer::new_for_http())
