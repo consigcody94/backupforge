@@ -1,0 +1,28 @@
+[package]
+name = "backupforge-mcp-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "backupforge-mcp"
+path = "src/main.rs"
+
+[dependencies]
+backupforge-common = { path = "../common" }
+backupforge-core = { path = "../core" }
+backupforge-storage = { path = "../storage" }
+backupforge-agent = { path = "../agent" }
+
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+walkdir = "2.5"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- MCP (Model Context Protocol) server for AI assistant integration
+  - 8 backup operation tools (backup, restore, list, stats, etc.)
+  - 4 resources for accessing backup data
+  - 3 prompts for backup planning and disaster recovery
+  - Full Claude Desktop integration support
+  - Comprehensive documentation in docs/MCP_SETUP.md
+
 ## [0.1.0] - 2024-01-21
 
 ### Added

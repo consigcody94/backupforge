@@ -13,6 +13,7 @@ Built with Rust for maximum performance, security, and reliability.
 - **Incremental Backups** - Only backup changed data
 - **Multi-tenancy** - Support for MSPs managing multiple clients
 - **Web Dashboard** - Modern REST API with web-based management interface
+- **MCP Server** - AI assistant integration via Model Context Protocol
 
 ### Backup Sources
 - Local files and directories
@@ -145,6 +146,25 @@ backupforge restore \
 ```bash
 backupforge server --config /etc/backupforge/config.toml --port 8080
 ```
+
+### MCP Server (AI Assistant Integration)
+
+BackupForge includes an MCP (Model Context Protocol) server for AI assistant integration:
+
+```bash
+# Build the MCP server
+cargo build --release --bin backupforge-mcp
+
+# Configure in Claude Desktop (see docs/MCP_SETUP.md)
+```
+
+Once configured, you can interact with BackupForge through Claude:
+- "Backup my Documents folder with encryption"
+- "Show me all my backup snapshots"
+- "How much storage am I using?"
+- "Help me create a disaster recovery plan"
+
+See [MCP Setup Guide](docs/MCP_SETUP.md) for detailed instructions.
 
 ## Configuration
 
