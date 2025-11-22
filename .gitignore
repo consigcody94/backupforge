@@ -1,0 +1,61 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+/dist/
+/build/
+
+# Environment
+.env
+.env.local
+config.toml
+*.log
+
+# Testing
+/test-data/
+/test-storage/
+/tmp/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Backups (don't commit actual backups)
+/backups/
+/storage/
+*.backup
+
+# Node (for web dashboard)
+node_modules/
+npm-debug.log
+yarn-error.log
+.pnp
+.pnp.js
+
+# Web dashboard build
+web-dashboard/dist/
+web-dashboard/build/
+web-dashboard/.next/
+
+# Coverage
+/coverage/
+*.profraw
+
+# Documentation build
+/site/
+
+# OS
+Thumbs.db
+.Trash-*

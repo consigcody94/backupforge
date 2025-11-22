@@ -1,0 +1,16 @@
+target/
+.git/
+.github/
+*.log
+*.tmp
+.env
+.env.local
+config.toml
+test-data/
+docs/
+*.md
+!README.md
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

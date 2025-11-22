@@ -1,0 +1,26 @@
+[package]
+name = "backupforge-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "backupforge"
+path = "src/main.rs"
+
+[dependencies]
+backupforge-common = { path = "../common" }
+backupforge-core = { path = "../core" }
+backupforge-storage = { path = "../storage" }
+backupforge-agent = { path = "../agent" }
+
+tokio = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }

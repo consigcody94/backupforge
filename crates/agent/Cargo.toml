@@ -1,0 +1,31 @@
+[package]
+name = "backupforge-agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+backupforge-common = { path = "../common" }
+backupforge-core = { path = "../core" }
+backupforge-storage = { path = "../storage" }
+
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+# SSH support
+ssh2 = { workspace = true }
+
+# File watching
+walkdir = "2.5"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3.10"
