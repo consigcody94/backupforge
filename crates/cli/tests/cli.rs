@@ -142,3 +142,53 @@ fn excluded_paths_are_left_out() {
     assert!(out.join("keep.txt").exists());
     assert!(!out.join("node_modules").exists());
 }
+
+#[test]
+fn forget_and_unlock_work_from_the_cli() {
+    let tmp = TempDir::new().unwrap();
+    let (src, repo) = (tmp.path().join("src"), tmp.path().join("repo"));
+    fs::create_dir_all(&src).unwrap();
+    fs::write(src.join("a.txt"), "first").unwrap();
+    assert!(run(&["backup", "-s", s(&src), "-d", s(&repo)], None)
+        .status
+        .success());
+    fs::write(src.join("a.txt"), "second").unwrap();
+    assert!(run(&["backup", "-s", s(&src), "-d", s(&repo)], None)
+        .status
+        .success());
+
+    let dry = run(&["forget", "-d", s(&repo), "-k", "1", "--dry-run"], None);
+    assert!(dry.status.success());
+    assert!(String::from_utf8_lossy(&dry.stdout).contains("Would remove 1"));
+    assert_eq!(
+        String::from_utf8_lossy(&run(&["list", "-d", s(&repo)], None).stdout)
+            .lines()
+            .count(),
+        2
+    );
+
+    assert!(run(&["forget", "-d", s(&repo), "-k", "1"], None)
+        .status
+        .success());
+    assert_eq!(
+        String::from_utf8_lossy(&run(&["list", "-d", s(&repo)], None).stdout)
+            .lines()
+            .count(),
+        1
+    );
+
+    // keep_last of zero is refused
+    assert!(!run(&["forget", "-d", s(&repo), "-k", "0"], None)
+        .status
+        .success());
+
+    // A leftover lock blocks forget until it is removed
+    fs::write(repo.join("metadata/lock"), b"{}").unwrap();
+    assert!(!run(&["forget", "-d", s(&repo), "-k", "1"], None)
+        .status
+        .success());
+    assert!(run(&["unlock", "-d", s(&repo)], None).status.success());
+    assert!(run(&["forget", "-d", s(&repo), "-k", "1"], None)
+        .status
+        .success());
+}

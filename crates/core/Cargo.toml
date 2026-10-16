@@ -35,7 +35,9 @@ hex = { workspace = true }
 # Compression
 zstd = { workspace = true }
 lz4 = { workspace = true }
+fastcdc = "3"
 
 [dev-dependencies]
+proptest = "1.12.0"
 tempfile = "3.10"
 tokio = { workspace = true, features = ["test-util"] }

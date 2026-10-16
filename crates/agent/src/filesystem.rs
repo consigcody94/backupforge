@@ -4,16 +4,18 @@ use backupforge_common::{
 };
 use backupforge_core::BackupEngine;
 use backupforge_storage::StorageManager;
+use cap_std::ambient_authority;
+use cap_std::fs::{Dir, OpenOptions};
 use chrono::{DateTime, Utc};
 use std::collections::HashSet;
+use std::io::{BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
-use tokio::fs;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use std::time::SystemTime;
+use tokio::io::AsyncReadExt;
 use walkdir::WalkDir;
 
-/// Files are read and chunked in segments of this size so memory use stays
-/// bounded; a chunk boundary is forced at each segment boundary.
+/// Files are read in segments of this size so memory use stays bounded.
 const SEGMENT_SIZE: u64 = 64 * 1024 * 1024;
 
 /// Metadata key prefix for snapshot manifests.
@@ -24,6 +26,9 @@ pub const SNAPSHOT_KEY_PREFIX: &str = "snapshot-";
 pub struct RestoreSummary {
     pub files: u64,
     pub directories: u64,
+    pub symlinks: u64,
+    /// Links not restored because their target would leave the restore directory.
+    pub skipped_links: u64,
     pub bytes: u64,
 }
 
@@ -39,6 +44,19 @@ impl VerifyReport {
     pub fn is_ok(&self) -> bool {
         self.missing.is_empty() && self.corrupt.is_empty()
     }
+}
+
+/// Result of a retention pass.
+#[derive(Debug, Clone, Default)]
+pub struct ForgetReport {
+    pub dry_run: bool,
+    /// Manifest keys that are kept.
+    pub kept: Vec<String>,
+    /// Manifest keys that are removed (or would be).
+    pub removed: Vec<String>,
+    pub chunks_referenced: u64,
+    /// Chunks no kept snapshot uses, and so deleted (or to be deleted).
+    pub chunks_unreferenced: u64,
 }
 
 struct StoredFile {
@@ -61,14 +79,20 @@ impl FilesystemBackup {
     ///
     /// Chunks are written first and the manifest last, so an interrupted run
     /// leaves unreferenced chunks but never a snapshot that points at missing
-    /// data. Files that cannot be read are skipped and recorded in the
-    /// snapshot's `tags` as `partial:N`; callers must surface that.
+    /// data. Entries that cannot be read, and special files such as sockets,
+    /// are skipped and counted in the snapshot's `tags` as `partial:N`.
+    /// Callers must surface that.
     pub async fn backup_directory(
         &self,
         source_path: &Path,
         excludes: &[String],
     ) -> Result<Snapshot> {
-        let root_meta = fs::metadata(source_path).await?;
+        let root_meta = tokio::fs::symlink_metadata(source_path).await?;
+        if root_meta.file_type().is_symlink() {
+            return Err(Error::InvalidConfig(
+                "source must not be a symbolic link; pass the link's target instead".to_string(),
+            ));
+        }
         let single_file = root_meta.is_file();
 
         let mut files: Vec<FileMetadata> = Vec::new();
@@ -89,7 +113,6 @@ impl FilesystemBackup {
                 }
             };
             let path = entry.path();
-            let file_type = entry.file_type();
 
             let rel = if single_file {
                 PathBuf::from(entry.file_name())
@@ -101,15 +124,34 @@ impl FilesystemBackup {
                 }
             };
             let rel_str = rel.to_string_lossy().replace('\\', "/");
+            let file_type = entry.file_type();
+            let meta = entry.metadata().ok();
 
-            if file_type.is_dir() {
+            if file_type.is_symlink() {
+                match std::fs::read_link(path) {
+                    Ok(target) => files.push(FileMetadata {
+                        path: rel_str,
+                        size: 0,
+                        modified: modified_time(&meta),
+                        permissions: 0o777,
+                        is_directory: false,
+                        chunk_ids: Vec::new(),
+                        symlink_target: Some(target.to_string_lossy().to_string()),
+                    }),
+                    Err(e) => {
+                        tracing::warn!("Failed to read link {}: {}", path.display(), e);
+                        skipped += 1;
+                    }
+                }
+            } else if file_type.is_dir() {
                 files.push(FileMetadata {
                     path: rel_str,
                     size: 0,
-                    modified: modified_time(&entry.metadata().ok()),
-                    permissions: mode_of(&entry.metadata().ok(), 0o755),
+                    modified: modified_time(&meta),
+                    permissions: mode_of(&meta, 0o755),
                     is_directory: true,
                     chunk_ids: Vec::new(),
+                    symlink_target: None,
                 });
             } else if file_type.is_file() {
                 match self.store_file(path, rel_str).await {
@@ -123,7 +165,8 @@ impl FilesystemBackup {
                     }
                 }
             } else {
-                tracing::warn!("Skipping symlink or special file: {}", path.display());
+                tracing::warn!("Skipping special file (not backed up): {}", path.display());
+                skipped += 1;
             }
         }
 
@@ -136,7 +179,7 @@ impl FilesystemBackup {
                 stored_total,
             )
             .await?;
-        // Directories are entries but not "files" in the summary count.
+        // Directories are entries but not counted as files in the summary.
         snapshot.file_count = files.iter().filter(|f| !f.is_directory).count() as u64;
         if skipped > 0 {
             snapshot.tags.push(format!("partial:{}", skipped));
@@ -159,7 +202,7 @@ impl FilesystemBackup {
 
     /// Chunk one file and write any chunks storage does not already have.
     async fn store_file(&self, path: &Path, rel_path: String) -> Result<StoredFile> {
-        let mut file = fs::File::open(path).await?;
+        let mut file = tokio::fs::File::open(path).await?;
         let meta = file.metadata().await?;
 
         let mut chunk_ids: Vec<ChunkId> = Vec::new();
@@ -192,6 +235,7 @@ impl FilesystemBackup {
                 permissions: mode_of(&Some(meta), 0o644),
                 is_directory: false,
                 chunk_ids,
+                symlink_target: None,
             },
             stored_bytes,
         })
@@ -217,6 +261,21 @@ impl FilesystemBackup {
         Ok(snapshots)
     }
 
+    /// Every manifest with its key. Fails if any one cannot be verified, so that
+    /// callers which delete data never work from an incomplete picture.
+    async fn load_all_manifests(&self) -> Result<Vec<(String, SnapshotManifest)>> {
+        let mut out = Vec::new();
+        for key in self.storage.list_metadata(SNAPSHOT_KEY_PREFIX).await? {
+            let manifest = self.read_manifest(&key).await.map_err(|e| {
+                Error::Storage(format!(
+                    "cannot verify snapshot {key} ({e}); refusing to change the repository"
+                ))
+            })?;
+            out.push((key, manifest));
+        }
+        Ok(out)
+    }
+
     async fn read_manifest(&self, key: &str) -> Result<SnapshotManifest> {
         let id = key
             .strip_prefix(SNAPSHOT_KEY_PREFIX)
@@ -237,13 +296,15 @@ impl FilesystemBackup {
     /// Load a manifest by snapshot ID, or the newest one when `id` is `None`.
     pub async fn load_manifest(&self, id: Option<&str>) -> Result<SnapshotManifest> {
         match id {
-            Some(id) => self
-                .read_manifest(&format!("{}{}", SNAPSHOT_KEY_PREFIX, id))
-                .await
-                .map_err(|e| match e {
-                    Error::Io(_) | Error::Unknown(_) => Error::SnapshotNotFound(id.to_string()),
-                    other => other,
-                }),
+            Some(id) => {
+                // Refuse anything that is not a plain snapshot ID before building a key.
+                if uuid::Uuid::parse_str(id).is_err() {
+                    return Err(Error::SnapshotNotFound(id.to_string()));
+                }
+                self.read_manifest(&format!("{}{}", SNAPSHOT_KEY_PREFIX, id))
+                    .await
+                    .map_err(|_| Error::SnapshotNotFound(id.to_string()))
+            }
             None => {
                 let latest = self.list_snapshots().await?.pop().ok_or_else(|| {
                     Error::SnapshotNotFound("no snapshots in repository".to_string())
@@ -256,58 +317,27 @@ impl FilesystemBackup {
 
     /// Restore a snapshot into `target_path`.
     ///
-    /// Manifest paths are untrusted: absolute paths, `..` components and
-    /// existing symlinks inside the target are refused. Every chunk is
-    /// decrypted and hash-verified before it is written.
+    /// The manifest is untrusted. Every write goes through a capability handle
+    /// rooted at the target, so a symlink that is created or swapped in during
+    /// the restore cannot redirect a write outside it. Unsafe symbolic links are
+    /// skipped and counted. Every chunk is decrypted and hash-verified before it
+    /// is written.
     pub async fn restore_snapshot(
         &self,
         snapshot_id: Option<&str>,
         target_path: &Path,
     ) -> Result<RestoreSummary> {
         let manifest = self.load_manifest(snapshot_id).await?;
+        let storage = self.storage.clone();
+        let engine = self.engine.clone();
+        let target = target_path.to_path_buf();
+        let handle = tokio::runtime::Handle::current();
 
-        fs::create_dir_all(target_path).await?;
-        let target = fs::canonicalize(target_path).await?;
-        let mut summary = RestoreSummary::default();
-
-        for entry in &manifest.files {
-            let rel = sanitize_relative(&entry.path)?;
-            let dest = target.join(&rel);
-            refuse_symlinks(&target, &rel).await?;
-
-            if entry.is_directory {
-                fs::create_dir_all(&dest).await?;
-                set_mode(&dest, entry.permissions).await;
-                summary.directories += 1;
-                continue;
-            }
-
-            if let Some(parent) = dest.parent() {
-                fs::create_dir_all(parent).await?;
-            }
-            let mut out = fs::File::create(&dest).await?;
-            let mut written = 0u64;
-            for chunk_id in &entry.chunk_ids {
-                let stored = self.storage.get_chunk(chunk_id).await?;
-                let plain = self.engine.open_chunk(chunk_id, &stored)?;
-                out.write_all(&plain).await?;
-                written += plain.len() as u64;
-            }
-            out.sync_all().await?;
-            drop(out);
-
-            if written != entry.size {
-                return Err(Error::Storage(format!(
-                    "Restored size mismatch for {}: expected {} bytes, got {}",
-                    entry.path, entry.size, written
-                )));
-            }
-            set_mode(&dest, entry.permissions).await;
-            summary.files += 1;
-            summary.bytes += written;
-        }
-
-        Ok(summary)
+        tokio::task::spawn_blocking(move || {
+            restore_blocking(&handle, &storage, &engine, &manifest, &target)
+        })
+        .await
+        .map_err(|e| Error::Unknown(format!("restore task failed: {e}")))?
     }
 
     /// Fetch and verify every chunk a snapshot references.
@@ -335,6 +365,151 @@ impl FilesystemBackup {
 
         Ok(report)
     }
+
+    /// Keep the newest `keep_last` snapshots and delete the rest, then delete
+    /// every chunk that no kept snapshot references.
+    ///
+    /// Manifests are deleted before chunks. A crash in between leaves
+    /// unreferenced chunks, which a later run removes, and never a snapshot that
+    /// points at missing data. Callers must hold the repository lock.
+    pub async fn forget(&self, keep_last: usize, dry_run: bool) -> Result<ForgetReport> {
+        if keep_last == 0 {
+            return Err(Error::InvalidConfig(
+                "keep_last must be at least 1".to_string(),
+            ));
+        }
+
+        let mut manifests = self.load_all_manifests().await?;
+        manifests.sort_by_key(|(_, m)| m.snapshot.created_at);
+        let cut = manifests.len().saturating_sub(keep_last);
+        let (old, kept) = manifests.split_at(cut);
+
+        let referenced: HashSet<String> = kept
+            .iter()
+            .flat_map(|(_, m)| m.files.iter())
+            .flat_map(|f| f.chunk_ids.iter().map(|c| c.0.clone()))
+            .collect();
+
+        let mut report = ForgetReport {
+            dry_run,
+            kept: kept.iter().map(|(k, _)| k.clone()).collect(),
+            removed: old.iter().map(|(k, _)| k.clone()).collect(),
+            chunks_referenced: referenced.len() as u64,
+            chunks_unreferenced: 0,
+        };
+
+        if !dry_run {
+            for (key, _) in old {
+                self.storage.delete_metadata(key).await?;
+            }
+        }
+
+        let unreferenced: Vec<ChunkId> = self
+            .storage
+            .list_chunks()
+            .await?
+            .into_iter()
+            .filter(|c| !referenced.contains(&c.0))
+            .collect();
+        report.chunks_unreferenced = unreferenced.len() as u64;
+
+        if !dry_run {
+            for chunk in &unreferenced {
+                self.storage.delete_chunk(chunk).await?;
+            }
+        }
+
+        Ok(report)
+    }
+}
+
+/// Runs on a blocking thread, so it may wait on async storage calls.
+fn restore_blocking(
+    handle: &tokio::runtime::Handle,
+    storage: &StorageManager,
+    engine: &BackupEngine,
+    manifest: &SnapshotManifest,
+    target: &Path,
+) -> Result<RestoreSummary> {
+    std::fs::create_dir_all(target)?;
+    let root = Dir::open_ambient_dir(target, ambient_authority())?;
+    let mut summary = RestoreSummary::default();
+    let mut dirs: Vec<&FileMetadata> = Vec::new();
+
+    for entry in &manifest.files {
+        let rel = sanitize_relative(&entry.path)?;
+
+        if entry.is_directory {
+            root.create_dir_all(&rel)?;
+            dirs.push(entry);
+            summary.directories += 1;
+        } else if let Some(link) = &entry.symlink_target {
+            let depth = rel.parent().map_or(0, |p| p.components().count());
+            if !link_stays_inside(link, depth) {
+                tracing::warn!(
+                    "Not restoring link {} -> {}: target leaves the restore directory",
+                    entry.path,
+                    link
+                );
+                summary.skipped_links += 1;
+                continue;
+            }
+            ensure_parent(&root, &rel)?;
+            clear_existing(&root, &rel)?;
+            root.symlink(link, &rel)?;
+            summary.symlinks += 1;
+        } else {
+            ensure_parent(&root, &rel)?;
+            summary.bytes += write_file(handle, storage, engine, &root, entry, &rel)?;
+            summary.files += 1;
+        }
+    }
+
+    // Directory modes and times go last: writing children changes them. Deepest
+    // first, so a parent is never locked read-only before its children are set.
+    dirs.sort_by_key(|d| std::cmp::Reverse(d.path.matches('/').count()));
+    for d in dirs {
+        let rel = sanitize_relative(&d.path)?;
+        let dir = root.open_dir(&rel)?;
+        apply_metadata(&dir.into_std_file(), d);
+    }
+
+    Ok(summary)
+}
+
+fn write_file(
+    handle: &tokio::runtime::Handle,
+    storage: &StorageManager,
+    engine: &BackupEngine,
+    root: &Dir,
+    entry: &FileMetadata,
+    rel: &Path,
+) -> Result<u64> {
+    clear_existing(root, rel)?;
+
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    let file = root.open_with(rel, &options)?;
+
+    let mut writer = BufWriter::new(file.into_std());
+    let mut written = 0u64;
+    for chunk_id in &entry.chunk_ids {
+        let stored = handle.block_on(storage.get_chunk(chunk_id))?;
+        let plain = engine.open_chunk(chunk_id, &stored)?;
+        writer.write_all(&plain)?;
+        written += plain.len() as u64;
+    }
+    if written != entry.size {
+        return Err(Error::Storage(format!(
+            "Restored size mismatch for {}: expected {} bytes, got {}",
+            entry.path, entry.size, written
+        )));
+    }
+
+    let file = writer.into_inner().map_err(|e| Error::Io(e.into_error()))?;
+    file.sync_all()?;
+    apply_metadata(&file, entry);
+    Ok(written)
 }
 
 /// Turn a manifest path into a safe relative path: normal components only.
@@ -361,24 +536,71 @@ fn sanitize_relative(path: &str) -> Result<PathBuf> {
     Ok(out)
 }
 
-/// Refuse to write through a symlink already present under the target.
-async fn refuse_symlinks(target: &Path, rel: &Path) -> Result<()> {
-    let mut current = target.to_path_buf();
-    for component in rel.components() {
-        current.push(component);
-        match fs::symlink_metadata(&current).await {
-            Ok(meta) if meta.file_type().is_symlink() => {
-                return Err(Error::PermissionDenied(format!(
-                    "Refusing to restore through symlink: {}",
-                    current.display()
-                )))
+/// A link target is safe when it is relative and, starting from the link's own
+/// directory (`link_dir_depth` components below the root), never climbs above
+/// the root. Absolute targets are never restored.
+fn link_stays_inside(target: &str, link_dir_depth: usize) -> bool {
+    let path = Path::new(target);
+    if target.is_empty() || path.has_root() {
+        return false;
+    }
+    let mut depth = link_dir_depth as i64;
+    for component in path.components() {
+        match component {
+            Component::Normal(_) => depth += 1,
+            Component::ParentDir => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
             }
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => break,
-            Err(e) => return Err(e.into()),
+            Component::CurDir => {}
+            _ => return false,
         }
     }
-    Ok(())
+    true
+}
+
+fn ensure_parent(root: &Dir, rel: &Path) -> Result<()> {
+    match rel.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => Ok(root.create_dir_all(parent)?),
+        _ => Ok(()),
+    }
+}
+
+/// Remove whatever is at `rel` so it can be recreated. Never follows a link: a
+/// symlink is unlinked, not read through. A directory where a file should go is
+/// an error rather than something to delete.
+fn clear_existing(root: &Dir, rel: &Path) -> Result<()> {
+    match root.symlink_metadata(rel) {
+        Ok(meta) if meta.is_dir() => Err(Error::Storage(format!(
+            "cannot replace directory with a file: {}",
+            rel.display()
+        ))),
+        Ok(_) => {
+            root.remove_file(rel)?;
+            Ok(())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Apply mode and modification time. Best effort: a failure is logged, not fatal,
+/// because the content is already verified chunk by chunk.
+fn apply_metadata(file: &std::fs::File, entry: &FileMetadata) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // Drop setuid, setgid and sticky bits on restore.
+        let mode = entry.permissions & 0o777;
+        if let Err(e) = file.set_permissions(std::fs::Permissions::from_mode(mode)) {
+            tracing::warn!("Could not set mode on {}: {}", entry.path, e);
+        }
+    }
+    if let Err(e) = file.set_modified(SystemTime::from(entry.modified)) {
+        tracing::warn!("Could not set time on {}: {}", entry.path, e);
+    }
 }
 
 fn modified_time(meta: &Option<std::fs::Metadata>) -> DateTime<Utc> {
@@ -401,16 +623,6 @@ fn mode_of(_meta: &Option<std::fs::Metadata>, default: u32) -> u32 {
     default
 }
 
-/// Apply permission bits, dropping setuid/setgid/sticky on restore.
-#[cfg(unix)]
-async fn set_mode(path: &Path, mode: u32) {
-    use std::os::unix::fs::PermissionsExt;
-    let _ = fs::set_permissions(path, std::fs::Permissions::from_mode(mode & 0o777)).await;
-}
-
-#[cfg(not(unix))]
-async fn set_mode(_path: &Path, _mode: u32) {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -425,5 +637,18 @@ mod tests {
         for bad in ["../x", "a/../../x", "/etc/passwd", "", ".", ".."] {
             assert!(sanitize_relative(bad).is_err(), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn link_targets_must_stay_inside_the_root() {
+        // A link at the top level (depth 0)
+        assert!(link_stays_inside("file.txt", 0));
+        assert!(link_stays_inside("sub/file.txt", 0));
+        assert!(!link_stays_inside("../escape", 0));
+        assert!(!link_stays_inside("/etc/passwd", 0));
+        // A link two levels down may climb back to the top, not above it
+        assert!(link_stays_inside("../../top", 2));
+        assert!(!link_stays_inside("../../../above", 2));
+        assert!(!link_stays_inside("", 0));
     }
 }

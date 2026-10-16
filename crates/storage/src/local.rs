@@ -181,6 +181,32 @@ impl StorageBackend for LocalStorage {
         Ok(keys)
     }
 
+    async fn create_metadata_exclusive(&self, key: &str, data: Vec<u8>) -> Result<bool> {
+        let path = self.metadata_path(key)?;
+        let mut file = match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .await
+        {
+            Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Ok(false),
+            Err(e) => return Err(e.into()),
+        };
+        file.write_all(&data).await?;
+        file.sync_all().await?;
+        Ok(true)
+    }
+
+    async fn delete_metadata(&self, key: &str) -> Result<()> {
+        let path = self.metadata_path(key)?;
+        match fs::remove_file(&path).await {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     async fn stats(&self) -> Result<StorageStats> {
         let chunks = self.list_chunks().await?;
         let mut total_bytes = 0u64;

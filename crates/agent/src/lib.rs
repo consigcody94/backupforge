@@ -19,7 +19,7 @@ pub mod proxmox;
 pub mod ssh;
 
 pub use agent::BackupAgent;
-pub use filesystem::{FilesystemBackup, RestoreSummary, VerifyReport};
+pub use filesystem::{FilesystemBackup, ForgetReport, RestoreSummary, VerifyReport};
 
 #[cfg(feature = "experimental-sources")]
 pub use cloudvm::CloudVMBackup;

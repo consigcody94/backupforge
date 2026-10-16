@@ -266,10 +266,9 @@ async fn restore_snapshot(arguments: &Value, agent: &Option<BackupAgent>) -> Res
         .as_str()
         .ok_or_else(|| anyhow!("target_path required"))?;
 
-    Ok(vec![json!({
-        "type": "text",
-        "text": "Restore functionality requires database integration.\nThis will be available in the next release."
-    })])
+    Err(anyhow!(
+        "restore_snapshot is not implemented in the MCP server; use the backupforge CLI"
+    ))
 }
 
 async fn get_storage_stats(_arguments: &Value, agent: &Option<BackupAgent>) -> Result<Vec<Value>> {

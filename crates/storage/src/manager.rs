@@ -80,6 +80,14 @@ impl StorageManager {
         self.backend.list_metadata(prefix).await
     }
 
+    pub async fn create_metadata_exclusive(&self, key: &str, data: Vec<u8>) -> Result<bool> {
+        self.backend.create_metadata_exclusive(key, data).await
+    }
+
+    pub async fn delete_metadata(&self, key: &str) -> Result<()> {
+        self.backend.delete_metadata(key).await
+    }
+
     pub async fn stats(&self) -> Result<StorageStats> {
         self.backend.stats().await
     }

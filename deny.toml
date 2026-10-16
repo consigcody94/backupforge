@@ -15,14 +15,16 @@ allow = [
     "BSD-3-Clause",
     "ISC",
     "Unicode-3.0",
-    "Unicode-DFS-2016",
     "Zlib",
     "CC0-1.0",
-    "MPL-2.0",
-    "OpenSSL",
     "BSL-1.0",
 ]
 confidence-threshold = 0.8
+
+# winx is a Windows-only dependency of cap-std; its LLVM exception is permissive.
+[[licenses.exceptions]]
+crate = "winx"
+allow = ["Apache-2.0 WITH LLVM-exception"]
 
 [bans]
 multiple-versions = "warn"

@@ -1,7 +1,7 @@
 use backupforge_common::{
     hash::hash_data,
     types::{Chunk, ChunkId},
-    Result,
+    Error, Result,
 };
 
 /// Chunking strategy for breaking data into chunks
@@ -72,7 +72,8 @@ impl Chunker {
         Ok(chunks)
     }
 
-    /// Content-Defined Chunking using FastCDC algorithm
+    /// Content-defined chunking with FastCDC. Cut points depend on content, so an
+    /// insertion only changes the chunks around it.
     fn chunk_cdc(
         &self,
         data: &[u8],
@@ -80,69 +81,32 @@ impl Chunker {
         avg_size: usize,
         max_size: usize,
     ) -> Result<Vec<Chunk>> {
-        let mut chunks = Vec::new();
-        let mut offset = 0;
+        use fastcdc::v2020::{
+            FastCDC, AVERAGE_MAX, AVERAGE_MIN, MAXIMUM_MAX, MAXIMUM_MIN, MINIMUM_MAX, MINIMUM_MIN,
+        };
 
-        // Mask for rolling hash boundary detection
-        let mask = (avg_size - 1) as u64;
-        let data_len = data.len();
-
-        while offset < data_len {
-            let remaining = data_len - offset;
-
-            // If remaining data is smaller than min_size, create final chunk
-            if remaining <= min_size {
-                let chunk_data = data[offset..].to_vec();
-                let hash = hash_data(&chunk_data);
-
-                chunks.push(Chunk {
-                    id: ChunkId::from_hash(&hash),
-                    size: chunk_data.len() as u64,
-                    hash,
-                    data: chunk_data,
-                });
-                break;
-            }
-
-            // Find chunk boundary using rolling hash
-            let mut chunk_end = offset + min_size;
-            let search_end = std::cmp::min(offset + max_size, data_len);
-
-            let mut hash: u64 = 0;
-            for (i, &byte) in data
-                .iter()
-                .enumerate()
-                .take(search_end)
-                .skip(offset + min_size)
-            {
-                // Simple rolling hash (Rabin fingerprint simplified)
-                hash = hash.wrapping_mul(31).wrapping_add(byte as u64);
-
-                // Check for chunk boundary
-                if (hash & mask) == 0 {
-                    chunk_end = i + 1;
-                    break;
-                }
-
-                // Force boundary at max_size
-                if i == search_end - 1 {
-                    chunk_end = search_end;
-                }
-            }
-
-            let chunk_data = data[offset..chunk_end].to_vec();
-            let chunk_hash = hash_data(&chunk_data);
-
-            chunks.push(Chunk {
-                id: ChunkId::from_hash(&chunk_hash),
-                size: chunk_data.len() as u64,
-                hash: chunk_hash,
-                data: chunk_data,
-            });
-
-            offset = chunk_end;
+        let fits = |v: usize, lo: u32, hi: u32| (lo as usize..=hi as usize).contains(&v);
+        if !fits(min_size, MINIMUM_MIN, MINIMUM_MAX)
+            || !fits(avg_size, AVERAGE_MIN, AVERAGE_MAX)
+            || !fits(max_size, MAXIMUM_MIN, MAXIMUM_MAX)
+            || !(min_size <= avg_size && avg_size <= max_size)
+        {
+            return Err(Error::InvalidConfig(format!(
+                "Invalid chunk sizes: min {min_size}, avg {avg_size}, max {max_size}"
+            )));
         }
 
+        let mut chunks = Vec::new();
+        for cut in FastCDC::new(data, min_size as u32, avg_size as u32, max_size as u32) {
+            let slice = &data[cut.offset..cut.offset + cut.length];
+            let hash = hash_data(slice);
+            chunks.push(Chunk {
+                id: ChunkId::from_hash(&hash),
+                size: slice.len() as u64,
+                hash,
+                data: slice.to_vec(),
+            });
+        }
         Ok(chunks)
     }
 }
@@ -205,9 +169,9 @@ mod tests {
             for strategy in [
                 ChunkingStrategy::Fixed { size: 64 },
                 ChunkingStrategy::ContentDefined {
-                    min_size: 16,
-                    avg_size: 64,
-                    max_size: 256,
+                    min_size: 64,
+                    avg_size: 256,
+                    max_size: 1024,
                 },
                 ChunkingStrategy::default(),
             ] {
@@ -216,5 +180,51 @@ mod tests {
                 assert_eq!(joined, data, "len {len}");
             }
         }
+    }
+
+    #[test]
+    fn cdc_resynchronises_after_a_small_insertion() {
+        let mut x: u64 = 0xdead_beef_cafe_f00d;
+        let original: Vec<u8> = (0..300_000)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                (x >> 24) as u8
+            })
+            .collect();
+        let mut edited = vec![0xAA];
+        edited.extend_from_slice(&original);
+
+        // Small chunks so the sample has hundreds of chunks, not three.
+        let chunker = Chunker::new(ChunkingStrategy::ContentDefined {
+            min_size: 64,
+            avg_size: 256,
+            max_size: 1024,
+        });
+        let before: std::collections::HashSet<_> = chunker
+            .chunk_data(&original)
+            .unwrap()
+            .into_iter()
+            .map(|c| c.id)
+            .collect();
+        let after: Vec<_> = chunker.chunk_data(&edited).unwrap();
+        let shared = after.iter().filter(|c| before.contains(&c.id)).count();
+        // Fixed-size chunking would change every chunk; CDC keeps most of them.
+        assert!(
+            shared * 10 >= after.len() * 8,
+            "{shared} of {} chunks shared",
+            after.len()
+        );
+    }
+
+    #[test]
+    fn invalid_cdc_sizes_are_rejected() {
+        let chunker = Chunker::new(ChunkingStrategy::ContentDefined {
+            min_size: 16,
+            avg_size: 64,
+            max_size: 256,
+        });
+        assert!(chunker.chunk_data(&[1, 2, 3]).is_err());
     }
 }

@@ -11,6 +11,16 @@ use server::McpServer;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Prototype: most tools are not implemented, the agent is never initialised,
+    // and there are no access controls on which paths a client may read or write.
+    if std::env::var("BACKUPFORGE_MCP_ENABLE").as_deref() != Ok("1") {
+        eprintln!(
+            "backupforge-mcp is an unfinished prototype (most tools do not work and \
+             there are no path access controls). Set BACKUPFORGE_MCP_ENABLE=1 to run it anyway."
+        );
+        std::process::exit(2);
+    }
+
     // Initialize tracing (stderr only, as stdout is used for MCP protocol)
     tracing_subscriber::fmt()
         .with_writer(io::stderr)
