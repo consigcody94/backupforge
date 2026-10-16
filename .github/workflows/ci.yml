@@ -76,6 +76,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        with:
+          # The action defaults to --all-features, which would include the unfinished s3 feature.
+          arguments: --no-default-features
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
