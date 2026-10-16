@@ -1,0 +1,7 @@
+name: backupforge CodeQL config
+# Test code uses throwaway passwords and keys on purpose; scanning it for
+# hard-coded credentials only produces noise. Production code is still scanned.
+paths-ignore:
+  - '**/*_tests.rs'
+  - 'crates/*/tests/**'
+  - 'fuzz/**'
