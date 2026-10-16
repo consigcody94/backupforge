@@ -43,7 +43,7 @@ enum Commands {
         storage: PathBuf,
 
         /// Exclude paths containing this text (repeatable)
-        #[arg(short, long)]
+        #[arg(short = 'x', long)]
         exclude: Vec<String>,
 
         /// Encrypt a new repository (existing repositories keep their mode)
@@ -133,8 +133,12 @@ async fn open(
     storage: &PathBuf,
     config: BackupConfig,
     encrypt_if_new: bool,
+    create: bool,
 ) -> anyhow::Result<BackupAgent> {
     let exists = repo_exists(storage);
+    if !exists && !create {
+        bail!("No repository at {} (run `backupforge init` or `backupforge backup` first)", storage.display());
+    }
     // Only ask for a password when one is needed: creating an encrypted
     // repository, or opening one that is encrypted.
     let needs_password = if exists {
@@ -173,7 +177,7 @@ async fn main() -> anyhow::Result<()> {
                 bail!("A repository already exists at {}", storage.display());
             }
             tokio::fs::create_dir_all(&storage).await?;
-            open(&storage, BackupConfig::default(), encrypt).await?;
+            open(&storage, BackupConfig::default(), encrypt, true).await?;
             println!(
                 "Initialized {} repository at {}",
                 if encrypt { "encrypted" } else { "unencrypted" },
@@ -192,7 +196,7 @@ async fn main() -> anyhow::Result<()> {
             config.compression = CompressionAlgorithm::Zstd(compression);
 
             tokio::fs::create_dir_all(&storage).await?;
-            let agent = open(&storage, config, encrypt).await?;
+            let agent = open(&storage, config, encrypt, true).await?;
 
             let job = BackupJob {
                 id: Uuid::new_v4(),
@@ -228,7 +232,7 @@ async fn main() -> anyhow::Result<()> {
             target,
             snapshot,
         } => {
-            let agent = open(&storage, BackupConfig::default(), false).await?;
+            let agent = open(&storage, BackupConfig::default(), false, false).await?;
             let summary = agent.restore_snapshot(snapshot.as_deref(), &target).await?;
             println!(
                 "Restored {} files, {} directories, {} bytes to {}",
@@ -240,7 +244,7 @@ async fn main() -> anyhow::Result<()> {
         }
 
         Commands::List { storage } => {
-            let agent = open(&storage, BackupConfig::default(), false).await?;
+            let agent = open(&storage, BackupConfig::default(), false, false).await?;
             let snapshots = agent.list_snapshots().await?;
             if snapshots.is_empty() {
                 println!("No snapshots.");
@@ -258,7 +262,7 @@ async fn main() -> anyhow::Result<()> {
         }
 
         Commands::Verify { storage, snapshot } => {
-            let agent = open(&storage, BackupConfig::default(), false).await?;
+            let agent = open(&storage, BackupConfig::default(), false, false).await?;
             let report = agent.verify_snapshot(snapshot.as_deref()).await?;
             println!("Checked {} chunks", report.chunks_checked);
             if !report.is_ok() {
@@ -278,7 +282,7 @@ async fn main() -> anyhow::Result<()> {
         }
 
         Commands::Stats { storage } => {
-            let agent = open(&storage, BackupConfig::default(), false).await?;
+            let agent = open(&storage, BackupConfig::default(), false, false).await?;
             let stats = agent.get_stats().await?;
             println!("Files in snapshots: {}", stats.total_files);
             println!("Bytes stored:       {}", stats.total_bytes);
