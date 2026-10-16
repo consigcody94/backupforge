@@ -28,6 +28,15 @@ impl AppState {
     }
 }
 
+/// A fresh random 256-bit secret, hex encoded. Never a fixed default: tokens
+/// signed with a known secret can be forged by anyone.
+fn random_secret() -> String {
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
 /// Server configuration
 #[derive(Clone)]
 pub struct ServerConfig {
@@ -41,13 +50,14 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            bind_address: "0.0.0.0".to_string(),
+            // Loopback only: this server has no working authentication yet.
+            bind_address: "127.0.0.1".to_string(),
             port: 8080,
             database_url: None,
             default_storage: Some(StorageConfig::Local {
                 path: "/var/lib/backupforge".to_string(),
             }),
-            jwt_secret: "change-me-in-production".to_string(),
+            jwt_secret: random_secret(),
         }
     }
 }

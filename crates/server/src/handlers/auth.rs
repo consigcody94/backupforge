@@ -25,21 +25,16 @@ pub async fn login(
     State(_state): State<AppState>,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, StatusCode> {
-    // Placeholder - would verify credentials against database
-    tracing::info!("Login attempt for user: {}", req.username);
-
-    // Generate JWT token (placeholder)
-    Ok(Json(LoginResponse {
-        token: "placeholder_token".to_string(),
-    }))
+    // Authentication is not implemented. Refuse rather than hand out a token
+    // that anyone could obtain with any password.
+    let _ = req;
+    Err(StatusCode::NOT_IMPLEMENTED)
 }
 
 pub async fn register(
     State(_state): State<AppState>,
     Json(req): Json<RegisterRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    // Placeholder - would create user in database
-    tracing::info!("Registration attempt for user: {}", req.username);
-
-    Ok(StatusCode::CREATED)
+    let _ = req;
+    Err(StatusCode::NOT_IMPLEMENTED)
 }

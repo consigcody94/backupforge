@@ -1,15 +1,15 @@
+use anyhow::{bail, Context};
 use backupforge_agent::BackupAgent;
 use backupforge_common::types::{BackupJob, BackupSource};
-use backupforge_core::{BackupConfig, ChunkingStrategy, CompressionAlgorithm, EncryptionKey};
+use backupforge_core::{BackupConfig, CompressionAlgorithm};
 use backupforge_storage::StorageConfig;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tracing_subscriber;
 use uuid::Uuid;
 
 #[derive(Parser)]
 #[command(name = "backupforge")]
-#[command(about = "Open-source backup and disaster recovery solution", long_about = None)]
+#[command(about = "Open-source backup tool: deduplicated, compressed, optionally encrypted", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -21,98 +21,166 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Backup a local directory
+    /// Initialize a backup repository
+    Init {
+        /// Repository path
+        #[arg(short = 'd', long)]
+        storage: PathBuf,
+
+        /// Encrypt the repository (password from BACKUPFORGE_PASSWORD or a prompt)
+        #[arg(short, long)]
+        encrypt: bool,
+    },
+
+    /// Back up a directory or file (creates the repository on first use)
     Backup {
-        /// Source path to backup
+        /// Source path to back up
         #[arg(short, long)]
         source: PathBuf,
 
-        /// Storage path
+        /// Repository path
         #[arg(short = 'd', long)]
         storage: PathBuf,
 
-        /// Exclude patterns
+        /// Exclude paths containing this text (repeatable)
         #[arg(short, long)]
         exclude: Vec<String>,
 
-        /// Enable encryption (will prompt for password)
+        /// Encrypt a new repository (existing repositories keep their mode)
         #[arg(short = 'e', long)]
         encrypt: bool,
 
-        /// Compression level (0-22 for zstd)
-        #[arg(short, long, default_value = "3")]
+        /// Zstd compression level (1-22)
+        #[arg(short, long, default_value = "3", value_parser = clap::value_parser!(i32).range(1..=22))]
         compression: i32,
     },
 
-    /// Restore a backup
+    /// Restore a snapshot (the newest unless --snapshot is given)
     Restore {
-        /// Storage path
+        /// Repository path
         #[arg(short = 'd', long)]
         storage: PathBuf,
 
-        /// Target path to restore to
+        /// Directory to restore into
         #[arg(short, long)]
         target: PathBuf,
 
-        /// Snapshot ID to restore
+        /// Snapshot ID
         #[arg(short, long)]
         snapshot: Option<String>,
     },
 
     /// List snapshots
     List {
-        /// Storage path
+        /// Repository path
         #[arg(short = 'd', long)]
         storage: PathBuf,
     },
 
-    /// Show storage statistics
+    /// Check that every chunk of a snapshot is present and uncorrupted
+    Verify {
+        /// Repository path
+        #[arg(short = 'd', long)]
+        storage: PathBuf,
+
+        /// Snapshot ID (newest if omitted)
+        #[arg(short, long)]
+        snapshot: Option<String>,
+    },
+
+    /// Show repository statistics
     Stats {
-        /// Storage path
+        /// Repository path
         #[arg(short = 'd', long)]
         storage: PathBuf,
     },
+}
 
-    /// Initialize a new backup repository
-    Init {
-        /// Storage path
-        #[arg(short = 'd', long)]
-        storage: PathBuf,
+/// Read the password from `BACKUPFORGE_PASSWORD`, else prompt without echo.
+/// New repositories ask twice. The password is never hardcoded or logged.
+fn read_password(confirm: bool) -> anyhow::Result<String> {
+    if let Ok(pw) = std::env::var("BACKUPFORGE_PASSWORD") {
+        if pw.is_empty() {
+            bail!("BACKUPFORGE_PASSWORD is set but empty");
+        }
+        return Ok(pw);
+    }
+    let pw = rpassword::prompt_password("Repository password: ")?;
+    if pw.is_empty() {
+        bail!("Password must not be empty");
+    }
+    if confirm {
+        let again = rpassword::prompt_password("Repeat password: ")?;
+        if pw != again {
+            bail!("Passwords do not match");
+        }
+    }
+    Ok(pw)
+}
 
-        /// Enable encryption
-        #[arg(short, long)]
-        encrypt: bool,
-    },
+fn local(path: &PathBuf) -> StorageConfig {
+    StorageConfig::Local {
+        path: path.to_string_lossy().to_string(),
+    }
+}
 
-    /// Run backup server/daemon
-    Server {
-        /// Server configuration file
-        #[arg(short, long)]
-        config: PathBuf,
+/// True when the path already holds a repository header.
+fn repo_exists(path: &PathBuf) -> bool {
+    path.join("metadata").join(backupforge_core::REPO_CONFIG_KEY).exists()
+}
 
-        /// Server port
-        #[arg(short, long, default_value = "8080")]
-        port: u16,
-    },
+async fn open(
+    storage: &PathBuf,
+    config: BackupConfig,
+    encrypt_if_new: bool,
+) -> anyhow::Result<BackupAgent> {
+    let exists = repo_exists(storage);
+    // Only ask for a password when one is needed: creating an encrypted
+    // repository, or opening one that is encrypted.
+    let needs_password = if exists {
+        let header = std::fs::read(storage.join("metadata").join(backupforge_core::REPO_CONFIG_KEY))
+            .context("Cannot read repository header")?;
+        backupforge_core::RepoConfig::from_bytes(&header)?.encrypted
+    } else {
+        encrypt_if_new
+    };
+    let password = if needs_password {
+        Some(read_password(!exists)?)
+    } else {
+        None
+    };
+
+    Ok(BackupAgent::open_repository(config, local(storage), password.as_deref(), encrypt_if_new).await?)
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // Setup logging
     let level = if cli.verbose {
         tracing::Level::DEBUG
     } else {
         tracing::Level::INFO
     };
-
     tracing_subscriber::fmt()
         .with_max_level(level)
         .with_target(false)
         .init();
 
     match cli.command {
+        Commands::Init { storage, encrypt } => {
+            if repo_exists(&storage) {
+                bail!("A repository already exists at {}", storage.display());
+            }
+            tokio::fs::create_dir_all(&storage).await?;
+            open(&storage, BackupConfig::default(), encrypt).await?;
+            println!(
+                "Initialized {} repository at {}",
+                if encrypt { "encrypted" } else { "unencrypted" },
+                storage.display()
+            );
+        }
+
         Commands::Backup {
             source,
             storage,
@@ -120,27 +188,11 @@ async fn main() -> anyhow::Result<()> {
             encrypt,
             compression,
         } => {
-            println!("🚀 Starting backup...");
-            println!("Source: {}", source.display());
-            println!("Storage: {}", storage.display());
+            let mut config = BackupConfig::default();
+            config.compression = CompressionAlgorithm::Zstd(compression);
 
-            let mut backup_config = BackupConfig::default();
-            backup_config.compression = CompressionAlgorithm::Zstd(compression);
-
-            if encrypt {
-                // In production, would prompt for password securely
-                let password = "test_password"; // PLACEHOLDER
-                let salt = b"salt123456789012";
-                let key = EncryptionKey::from_password(password, salt)?;
-                backup_config.encryption_key = Some(key);
-                println!("🔒 Encryption enabled");
-            }
-
-            let storage_config = StorageConfig::Local {
-                path: storage.to_string_lossy().to_string(),
-            };
-
-            let agent = BackupAgent::new(backup_config, storage_config).await?;
+            tokio::fs::create_dir_all(&storage).await?;
+            let agent = open(&storage, config, encrypt).await?;
 
             let job = BackupJob {
                 id: Uuid::new_v4(),
@@ -159,15 +211,16 @@ async fn main() -> anyhow::Result<()> {
 
             let snapshot = agent.run_job(&job).await?;
 
-            println!("✅ Backup completed!");
-            println!("Snapshot ID: {}", snapshot.id.0);
-            println!("Files: {}", snapshot.file_count);
-            println!("Size: {} bytes", snapshot.total_size);
-            println!(
-                "Compressed: {} bytes ({:.1}%)",
-                snapshot.compressed_size,
-                (snapshot.compressed_size as f64 / snapshot.total_size as f64) * 100.0
-            );
+            println!("Snapshot: {}", snapshot.id.0);
+            println!("Files:    {}", snapshot.file_count);
+            println!("Size:     {} bytes", snapshot.total_size);
+            println!("Stored:   {} bytes (before deduplication)", snapshot.compressed_size);
+
+            if let Some(tag) = snapshot.tags.iter().find(|t| t.starts_with("partial:")) {
+                let n = tag.trim_start_matches("partial:");
+                eprintln!("WARNING: {} entries could not be read and are NOT in this backup.", n);
+                std::process::exit(2);
+            }
         }
 
         Commands::Restore {
@@ -175,57 +228,60 @@ async fn main() -> anyhow::Result<()> {
             target,
             snapshot,
         } => {
-            println!("🔄 Starting restore...");
-            println!("Storage: {}", storage.display());
-            println!("Target: {}", target.display());
-
-            // Would implement restore logic
-            println!("⚠️  Restore functionality coming soon!");
+            let agent = open(&storage, BackupConfig::default(), false).await?;
+            let summary = agent.restore_snapshot(snapshot.as_deref(), &target).await?;
+            println!(
+                "Restored {} files, {} directories, {} bytes to {}",
+                summary.files,
+                summary.directories,
+                summary.bytes,
+                target.display()
+            );
         }
 
         Commands::List { storage } => {
-            println!("📋 Listing snapshots from: {}", storage.display());
+            let agent = open(&storage, BackupConfig::default(), false).await?;
+            let snapshots = agent.list_snapshots().await?;
+            if snapshots.is_empty() {
+                println!("No snapshots.");
+            }
+            for s in snapshots {
+                println!(
+                    "{}  {}  {} files  {} bytes  {}",
+                    s.id.0,
+                    s.created_at.format("%Y-%m-%d %H:%M:%S UTC"),
+                    s.file_count,
+                    s.total_size,
+                    s.source_path
+                );
+            }
+        }
 
-            // Would list snapshots from storage
-            println!("⚠️  List functionality coming soon!");
+        Commands::Verify { storage, snapshot } => {
+            let agent = open(&storage, BackupConfig::default(), false).await?;
+            let report = agent.verify_snapshot(snapshot.as_deref()).await?;
+            println!("Checked {} chunks", report.chunks_checked);
+            if !report.is_ok() {
+                for id in &report.missing {
+                    eprintln!("MISSING {}", id);
+                }
+                for id in &report.corrupt {
+                    eprintln!("CORRUPT {}", id);
+                }
+                bail!(
+                    "Verification failed: {} missing, {} corrupt",
+                    report.missing.len(),
+                    report.corrupt.len()
+                );
+            }
+            println!("OK");
         }
 
         Commands::Stats { storage } => {
-            println!("📊 Storage statistics for: {}", storage.display());
-
-            let storage_config = StorageConfig::Local {
-                path: storage.to_string_lossy().to_string(),
-            };
-
-            let agent = BackupAgent::new(BackupConfig::default(), storage_config).await?;
+            let agent = open(&storage, BackupConfig::default(), false).await?;
             let stats = agent.get_stats().await?;
-
-            println!("Total bytes: {}", stats.total_bytes);
-        }
-
-        Commands::Init { storage, encrypt } => {
-            println!("🎯 Initializing backup repository...");
-            println!("Storage: {}", storage.display());
-
-            // Create storage directory
-            tokio::fs::create_dir_all(&storage).await?;
-
-            if encrypt {
-                println!("🔐 Encryption will be enabled for this repository");
-                // Would save encryption config
-            }
-
-            println!("✅ Repository initialized!");
-        }
-
-        Commands::Server { config, port } => {
-            println!("🌐 Starting BackupForge server...");
-            println!("Config: {}", config.display());
-            println!("Port: {}", port);
-
-            // Would start the API server
-            println!("⚠️  Server functionality coming soon!");
-            println!("    This will start the REST API and web dashboard");
+            println!("Files in snapshots: {}", stats.total_files);
+            println!("Bytes stored:       {}", stats.total_bytes);
         }
     }
 
