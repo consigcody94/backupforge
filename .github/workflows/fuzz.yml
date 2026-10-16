@@ -1,0 +1,35 @@
+name: Fuzz
+
+on:
+  schedule:
+    - cron: '17 3 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Fuzz ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [open_chunk, open_blob, repo_config, chunker]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # nightly
+        with:
+          toolchain: nightly
+      - run: cargo install cargo-fuzz --locked
+      - name: Fuzz for 10 minutes
+        run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=600
+        working-directory: fuzz
+      - name: Upload crashes
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fuzz-crashes-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}

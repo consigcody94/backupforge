@@ -5,10 +5,10 @@ decisions are made so contributors know what to expect.
 
 ## Roles
 
-- **Maintainer** — currently Cody ([@consigcody94](https://github.com/consigcody94)).
+- **Maintainer**: currently Cody ([@consigcody94](https://github.com/consigcody94)).
   Merges changes, cuts releases, handles security reports, and has final say.
-- **Contributor** — anyone who opens an issue, pull request, or review.
-- **Committer** — a contributor with merge rights. Granted by the maintainer after
+- **Contributor**: anyone who opens an issue, pull request, or review.
+- **Committer**: a contributor with merge rights. Granted by the maintainer after
   several accepted changes and a record of careful review. Not yet used.
 
 ## How decisions are made

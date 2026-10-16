@@ -1,3 +1,5 @@
+> **Design note, not documentation.** This describes intended behavior from early planning. Much of it is not implemented (server, dashboard, S3, scheduling, remote sources). See the [README](../../README.md) for what works today.
+
 # BackupForge Architecture
 
 ## Overview

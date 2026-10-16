@@ -187,4 +187,34 @@ mod tests {
             assert_eq!(c1.id, c2.id);
         }
     }
+
+    #[test]
+    fn chunks_always_reassemble_to_the_input() {
+        let mut x: u64 = 0x1234_5678_9abc_def0;
+        for len in [
+            0usize, 1, 15, 16, 17, 63, 64, 65, 255, 256, 257, 5_000, 70_000,
+        ] {
+            let data: Vec<u8> = (0..len)
+                .map(|_| {
+                    x ^= x << 13;
+                    x ^= x >> 7;
+                    x ^= x << 17;
+                    (x >> 24) as u8
+                })
+                .collect();
+            for strategy in [
+                ChunkingStrategy::Fixed { size: 64 },
+                ChunkingStrategy::ContentDefined {
+                    min_size: 16,
+                    avg_size: 64,
+                    max_size: 256,
+                },
+                ChunkingStrategy::default(),
+            ] {
+                let chunks = Chunker::new(strategy).chunk_data(&data).unwrap();
+                let joined: Vec<u8> = chunks.iter().flat_map(|c| c.data.clone()).collect();
+                assert_eq!(joined, data, "len {len}");
+            }
+        }
+    }
 }
