@@ -4,7 +4,7 @@ use backupforge_common::types::{BackupJob, BackupSource};
 use backupforge_core::{BackupConfig, CompressionAlgorithm};
 use backupforge_storage::StorageConfig;
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 #[derive(Parser)]
@@ -118,32 +118,41 @@ fn read_password(confirm: bool) -> anyhow::Result<String> {
     Ok(pw)
 }
 
-fn local(path: &PathBuf) -> StorageConfig {
+fn local(path: &Path) -> StorageConfig {
     StorageConfig::Local {
         path: path.to_string_lossy().to_string(),
     }
 }
 
 /// True when the path already holds a repository header.
-fn repo_exists(path: &PathBuf) -> bool {
-    path.join("metadata").join(backupforge_core::REPO_CONFIG_KEY).exists()
+fn repo_exists(path: &Path) -> bool {
+    path.join("metadata")
+        .join(backupforge_core::REPO_CONFIG_KEY)
+        .exists()
 }
 
 async fn open(
-    storage: &PathBuf,
+    storage: &Path,
     config: BackupConfig,
     encrypt_if_new: bool,
     create: bool,
 ) -> anyhow::Result<BackupAgent> {
     let exists = repo_exists(storage);
     if !exists && !create {
-        bail!("No repository at {} (run `backupforge init` or `backupforge backup` first)", storage.display());
+        bail!(
+            "No repository at {} (run `backupforge init` or `backupforge backup` first)",
+            storage.display()
+        );
     }
     // Only ask for a password when one is needed: creating an encrypted
     // repository, or opening one that is encrypted.
     let needs_password = if exists {
-        let header = std::fs::read(storage.join("metadata").join(backupforge_core::REPO_CONFIG_KEY))
-            .context("Cannot read repository header")?;
+        let header = std::fs::read(
+            storage
+                .join("metadata")
+                .join(backupforge_core::REPO_CONFIG_KEY),
+        )
+        .context("Cannot read repository header")?;
         backupforge_core::RepoConfig::from_bytes(&header)?.encrypted
     } else {
         encrypt_if_new
@@ -154,7 +163,10 @@ async fn open(
         None
     };
 
-    Ok(BackupAgent::open_repository(config, local(storage), password.as_deref(), encrypt_if_new).await?)
+    Ok(
+        BackupAgent::open_repository(config, local(storage), password.as_deref(), encrypt_if_new)
+            .await?,
+    )
 }
 
 #[tokio::main]
@@ -192,8 +204,10 @@ async fn main() -> anyhow::Result<()> {
             encrypt,
             compression,
         } => {
-            let mut config = BackupConfig::default();
-            config.compression = CompressionAlgorithm::Zstd(compression);
+            let config = BackupConfig {
+                compression: CompressionAlgorithm::Zstd(compression),
+                ..BackupConfig::default()
+            };
 
             tokio::fs::create_dir_all(&storage).await?;
             let agent = open(&storage, config, encrypt, true).await?;
@@ -218,11 +232,17 @@ async fn main() -> anyhow::Result<()> {
             println!("Snapshot: {}", snapshot.id.0);
             println!("Files:    {}", snapshot.file_count);
             println!("Size:     {} bytes", snapshot.total_size);
-            println!("Stored:   {} bytes (before deduplication)", snapshot.compressed_size);
+            println!(
+                "Stored:   {} bytes (before deduplication)",
+                snapshot.compressed_size
+            );
 
             if let Some(tag) = snapshot.tags.iter().find(|t| t.starts_with("partial:")) {
                 let n = tag.trim_start_matches("partial:");
-                eprintln!("WARNING: {} entries could not be read and are NOT in this backup.", n);
+                eprintln!(
+                    "WARNING: {} entries could not be read and are NOT in this backup.",
+                    n
+                );
                 std::process::exit(2);
             }
         }

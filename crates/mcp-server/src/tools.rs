@@ -176,7 +176,9 @@ pub async fn execute_tool(
 }
 
 async fn backup_directory(arguments: &Value, agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
-    let agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
+    let agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
 
     let source_path = arguments["source_path"]
         .as_str()
@@ -227,7 +229,9 @@ async fn backup_directory(arguments: &Value, agent: &Option<BackupAgent>) -> Res
 }
 
 async fn list_snapshots(arguments: &Value, agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
-    let _agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
+    let _agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
     let _limit = arguments["limit"].as_u64().unwrap_or(50);
 
     // In a real implementation, this would query the storage backend
@@ -238,7 +242,9 @@ async fn list_snapshots(arguments: &Value, agent: &Option<BackupAgent>) -> Resul
 }
 
 async fn get_snapshot_info(arguments: &Value, agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
-    let _agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
+    let _agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
     let snapshot_id = arguments["snapshot_id"]
         .as_str()
         .ok_or_else(|| anyhow!("snapshot_id required"))?;
@@ -250,7 +256,9 @@ async fn get_snapshot_info(arguments: &Value, agent: &Option<BackupAgent>) -> Re
 }
 
 async fn restore_snapshot(arguments: &Value, agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
-    let _agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
+    let _agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
     let _snapshot_id = arguments["snapshot_id"]
         .as_str()
         .ok_or_else(|| anyhow!("snapshot_id required"))?;
@@ -264,8 +272,10 @@ async fn restore_snapshot(arguments: &Value, agent: &Option<BackupAgent>) -> Res
     })])
 }
 
-async fn get_storage_stats(arguments: &Value, agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
-    let agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
+async fn get_storage_stats(_arguments: &Value, agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
+    let agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
 
     match agent.get_stats().await {
         Ok(stats) => Ok(vec![json!({
@@ -289,8 +299,12 @@ async fn get_storage_stats(arguments: &Value, agent: &Option<BackupAgent>) -> Re
 }
 
 async fn create_backup_job(arguments: &Value, agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
-    let _agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
-    let name = arguments["name"].as_str().ok_or_else(|| anyhow!("name required"))?;
+    let _agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
+    let name = arguments["name"]
+        .as_str()
+        .ok_or_else(|| anyhow!("name required"))?;
     let source_path = arguments["source_path"]
         .as_str()
         .ok_or_else(|| anyhow!("source_path required"))?;
@@ -305,7 +319,9 @@ async fn create_backup_job(arguments: &Value, agent: &Option<BackupAgent>) -> Re
 }
 
 async fn verify_backup(arguments: &Value, agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
-    let _agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
+    let _agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
     let snapshot_id = arguments["snapshot_id"]
         .as_str()
         .ok_or_else(|| anyhow!("snapshot_id required"))?;
@@ -320,7 +336,9 @@ async fn estimate_backup_size(
     arguments: &Value,
     agent: &Option<BackupAgent>,
 ) -> Result<Vec<Value>> {
-    let _agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
+    let _agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
     let source_path = arguments["source_path"]
         .as_str()
         .ok_or_else(|| anyhow!("source_path required"))?;
@@ -340,13 +358,11 @@ async fn estimate_backup_size(
             file_count = 1;
         }
     } else if path.is_dir() {
-        for entry in walkdir::WalkDir::new(&path) {
-            if let Ok(entry) = entry {
-                if entry.file_type().is_file() {
-                    if let Ok(metadata) = entry.metadata() {
-                        total_size += metadata.len();
-                        file_count += 1;
-                    }
+        for entry in walkdir::WalkDir::new(&path).into_iter().flatten() {
+            if entry.file_type().is_file() {
+                if let Ok(metadata) = entry.metadata() {
+                    total_size += metadata.len();
+                    file_count += 1;
                 }
             }
         }

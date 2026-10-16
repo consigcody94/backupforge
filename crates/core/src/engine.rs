@@ -19,21 +19,11 @@ const FORMAT_PLAIN: u8 = 1;
 const FORMAT_ENCRYPTED: u8 = 2;
 
 /// Configuration for the backup engine
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct BackupConfig {
     pub chunking_strategy: ChunkingStrategy,
     pub compression: CompressionAlgorithm,
     pub encryption_key: Option<EncryptionKey>,
-}
-
-impl Default for BackupConfig {
-    fn default() -> Self {
-        Self {
-            chunking_strategy: ChunkingStrategy::default(),
-            compression: CompressionAlgorithm::default(),
-            encryption_key: None,
-        }
-    }
 }
 
 /// A chunk ready to be written to storage.
@@ -263,9 +253,10 @@ mod tests {
     use super::*;
 
     fn encrypted_engine() -> BackupEngine {
-        let mut config = BackupConfig::default();
-        config.encryption_key = Some(EncryptionKey::generate());
-        BackupEngine::new(config)
+        BackupEngine::new(BackupConfig {
+            encryption_key: Some(EncryptionKey::generate()),
+            ..BackupConfig::default()
+        })
     }
 
     #[tokio::test]
@@ -306,7 +297,10 @@ mod tests {
     #[test]
     fn seal_open_round_trip_plain_and_encrypted() {
         let data: Vec<u8> = (0..300_000u32).map(|i| (i % 251) as u8).collect();
-        for engine in [BackupEngine::new(BackupConfig::default()), encrypted_engine()] {
+        for engine in [
+            BackupEngine::new(BackupConfig::default()),
+            encrypted_engine(),
+        ] {
             let mut restored = Vec::new();
             for sealed in engine.seal_data(&data).unwrap() {
                 restored.extend(engine.open_chunk(&sealed.id, &sealed.bytes).unwrap());
@@ -337,7 +331,10 @@ mod tests {
 
     #[test]
     fn corruption_is_detected_in_every_byte_region() {
-        for engine in [BackupEngine::new(BackupConfig::default()), encrypted_engine()] {
+        for engine in [
+            BackupEngine::new(BackupConfig::default()),
+            encrypted_engine(),
+        ] {
             let sealed = engine.seal_data(&b"important data ".repeat(200)).unwrap();
             let chunk = &sealed[0];
             for i in [0, 1, chunk.bytes.len() / 2, chunk.bytes.len() - 1] {
@@ -365,21 +362,32 @@ mod tests {
         let engine = encrypted_engine();
         let sealed = engine.seal_data(&b"data".repeat(100)).unwrap().remove(0);
 
-        assert!(encrypted_engine().open_chunk(&sealed.id, &sealed.bytes).is_err());
+        assert!(encrypted_engine()
+            .open_chunk(&sealed.id, &sealed.bytes)
+            .is_err());
         assert!(BackupEngine::new(BackupConfig::default())
             .open_chunk(&sealed.id, &sealed.bytes)
             .is_err());
 
         let plain_engine = BackupEngine::new(BackupConfig::default());
-        let plain = plain_engine.seal_data(&b"data".repeat(100)).unwrap().remove(0);
+        let plain = plain_engine
+            .seal_data(&b"data".repeat(100))
+            .unwrap()
+            .remove(0);
         assert!(engine.open_chunk(&plain.id, &plain.bytes).is_err());
     }
 
     #[test]
     fn blobs_round_trip_and_are_bound_to_name() {
-        for engine in [BackupEngine::new(BackupConfig::default()), encrypted_engine()] {
+        for engine in [
+            BackupEngine::new(BackupConfig::default()),
+            encrypted_engine(),
+        ] {
             let sealed = engine.seal_blob("snapshot", "abc", b"manifest").unwrap();
-            assert_eq!(engine.open_blob("snapshot", "abc", &sealed).unwrap(), b"manifest");
+            assert_eq!(
+                engine.open_blob("snapshot", "abc", &sealed).unwrap(),
+                b"manifest"
+            );
 
             if engine.is_encrypted() {
                 assert!(engine.open_blob("snapshot", "other", &sealed).is_err());

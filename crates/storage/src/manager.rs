@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use backupforge_common::{types::ChunkId, Result};
 use std::sync::Arc;
 
@@ -13,29 +12,25 @@ pub struct StorageManager {
 impl StorageManager {
     pub async fn from_config(config: StorageConfig) -> Result<Self> {
         let backend: Arc<dyn StorageBackend> = match config {
-            StorageConfig::Local { path } => {
-                Arc::new(LocalStorage::new(path).await?)
-            }
+            StorageConfig::Local { path } => Arc::new(LocalStorage::new(path).await?),
 
             StorageConfig::S3 {
                 bucket,
                 region,
                 endpoint,
                 ..
-            } => {
-                Arc::new(S3Storage::new(bucket, region, endpoint, None)?)
-            }
+            } => Arc::new(S3Storage::new(bucket, region, endpoint, None)?),
 
             StorageConfig::B2 {
                 bucket,
-                key_id,
-                application_key,
+                key_id: _,
+                application_key: _,
             } => {
                 // B2 is S3-compatible
                 Arc::new(S3Storage::new(
                     bucket,
                     "us-west-000".to_string(),
-                    Some(format!("https://s3.us-west-000.backblazeb2.com")),
+                    Some("https://s3.us-west-000.backblazeb2.com".to_string()),
                     None,
                 )?)
             }

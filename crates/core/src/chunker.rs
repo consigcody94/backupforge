@@ -1,5 +1,8 @@
-use backupforge_common::{hash::hash_data, types::{Chunk, ChunkId}, Result, Error};
-use bytes::Bytes;
+use backupforge_common::{
+    hash::hash_data,
+    types::{Chunk, ChunkId},
+    Result,
+};
 
 /// Chunking strategy for breaking data into chunks
 #[derive(Debug, Clone)]
@@ -106,9 +109,14 @@ impl Chunker {
             let search_end = std::cmp::min(offset + max_size, data_len);
 
             let mut hash: u64 = 0;
-            for i in (offset + min_size)..search_end {
+            for (i, &byte) in data
+                .iter()
+                .enumerate()
+                .take(search_end)
+                .skip(offset + min_size)
+            {
                 // Simple rolling hash (Rabin fingerprint simplified)
-                hash = hash.wrapping_mul(31).wrapping_add(data[i] as u64);
+                hash = hash.wrapping_mul(31).wrapping_add(byte as u64);
 
                 // Check for chunk boundary
                 if (hash & mask) == 0 {
@@ -163,7 +171,7 @@ mod tests {
 
         assert!(!chunks.is_empty());
         // CDC should create at least one chunk
-        assert!(chunks.len() >= 1);
+        assert!(!chunks.is_empty());
     }
 
     #[test]

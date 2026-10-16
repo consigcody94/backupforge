@@ -29,7 +29,7 @@ pub async fn create_tenant(
 
 pub async fn get_tenant(
     State(_state): State<AppState>,
-    Path(id): Path<String>,
+    Path(_id): Path<String>,
 ) -> Result<Json<Tenant>, StatusCode> {
     Err(StatusCode::NOT_FOUND)
 }

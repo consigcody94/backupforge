@@ -60,7 +60,9 @@ impl EncryptionKey {
     /// Derive a key from a password using Argon2id with explicit parameters
     pub fn derive(password: &str, params: &KdfParams) -> Result<Self> {
         if params.salt.len() < MIN_SALT_SIZE {
-            return Err(Error::Encryption("Salt must be at least 16 bytes".to_string()));
+            return Err(Error::Encryption(
+                "Salt must be at least 16 bytes".to_string(),
+            ));
         }
         let argon_params = Params::new(
             params.memory_kib,
@@ -83,7 +85,9 @@ impl EncryptionKey {
     /// Load key from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if bytes.len() != KEY_SIZE {
-            return Err(Error::Encryption("Key must be exactly 32 bytes".to_string()));
+            return Err(Error::Encryption(
+                "Key must be exactly 32 bytes".to_string(),
+            ));
         }
 
         let mut key = [0u8; KEY_SIZE];
@@ -136,7 +140,13 @@ impl Encryptor {
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         let ciphertext = cipher
-            .encrypt(nonce, Payload { msg: plaintext, aad })
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: plaintext,
+                    aad,
+                },
+            )
             .map_err(|_| Error::Encryption("Encryption failed".to_string()))?;
 
         let mut result = Vec::with_capacity(NONCE_SIZE + ciphertext.len());
@@ -159,8 +169,16 @@ impl Encryptor {
         let nonce = Nonce::from_slice(nonce_bytes);
 
         cipher
-            .decrypt(nonce, Payload { msg: ciphertext, aad })
-            .map_err(|_| Error::Encryption("Decryption failed: wrong key or corrupted data".to_string()))
+            .decrypt(
+                nonce,
+                Payload {
+                    msg: ciphertext,
+                    aad,
+                },
+            )
+            .map_err(|_| {
+                Error::Encryption("Decryption failed: wrong key or corrupted data".to_string())
+            })
     }
 }
 
@@ -268,6 +286,8 @@ mod tests {
         }
 
         // Truncation
-        assert!(encryptor.decrypt(&encrypted[..encrypted.len() - 1], b"").is_err());
+        assert!(encryptor
+            .decrypt(&encrypted[..encrypted.len() - 1], b"")
+            .is_err());
     }
 }

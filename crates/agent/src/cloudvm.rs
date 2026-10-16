@@ -74,7 +74,8 @@ impl CloudVMBackup {
 
         Err(Error::Unknown(
             "AWS EC2 backup implementation in progress. \
-             Will use AWS SDK to create AMIs and EBS snapshots.".to_string(),
+             Will use AWS SDK to create AMIs and EBS snapshots."
+                .to_string(),
         ))
     }
 
@@ -97,7 +98,8 @@ impl CloudVMBackup {
 
         Err(Error::Unknown(
             "Azure VM backup implementation in progress. \
-             Will use Azure SDK to create VM and disk snapshots.".to_string(),
+             Will use Azure SDK to create VM and disk snapshots."
+                .to_string(),
         ))
     }
 
@@ -120,7 +122,8 @@ impl CloudVMBackup {
 
         Err(Error::Unknown(
             "GCP VM backup implementation in progress. \
-             Will use GCP SDK to create machine images and disk snapshots.".to_string(),
+             Will use GCP SDK to create machine images and disk snapshots."
+                .to_string(),
         ))
     }
 
@@ -143,7 +146,9 @@ impl CloudVMBackup {
     /// List Azure VMs
     pub async fn list_azure_vms(&self) -> Result<Vec<CloudVMInfo>> {
         match &self.provider {
-            CloudProvider::Azure { subscription_id, .. } => {
+            CloudProvider::Azure {
+                subscription_id, ..
+            } => {
                 tracing::info!("Listing Azure VMs in subscription: {}", subscription_id);
 
                 // Would use Azure SDK:
@@ -182,15 +187,21 @@ impl CloudVMBackup {
         match &self.provider {
             CloudProvider::AWS { .. } => {
                 tracing::info!("Importing AWS snapshot: {}", snapshot_id);
-                Err(Error::Unknown("AWS snapshot import in progress".to_string()))
+                Err(Error::Unknown(
+                    "AWS snapshot import in progress".to_string(),
+                ))
             }
             CloudProvider::Azure { .. } => {
                 tracing::info!("Importing Azure snapshot: {}", snapshot_id);
-                Err(Error::Unknown("Azure snapshot import in progress".to_string()))
+                Err(Error::Unknown(
+                    "Azure snapshot import in progress".to_string(),
+                ))
             }
             CloudProvider::GCP { .. } => {
                 tracing::info!("Importing GCP snapshot: {}", snapshot_id);
-                Err(Error::Unknown("GCP snapshot import in progress".to_string()))
+                Err(Error::Unknown(
+                    "GCP snapshot import in progress".to_string(),
+                ))
             }
         }
     }
@@ -221,12 +232,19 @@ pub mod aws {
         //     .send()
         //     .await?;
 
-        Err(Error::Unknown("EBS snapshot creation in progress".to_string()))
+        Err(Error::Unknown(
+            "EBS snapshot creation in progress".to_string(),
+        ))
     }
 
     /// Copy AMI to another region
     pub async fn copy_ami(ami_id: &str, source_region: &str, dest_region: &str) -> Result<String> {
-        tracing::info!("Copying AMI {} from {} to {}", ami_id, source_region, dest_region);
+        tracing::info!(
+            "Copying AMI {} from {} to {}",
+            ami_id,
+            source_region,
+            dest_region
+        );
 
         Err(Error::Unknown("AMI copy in progress".to_string()))
     }
@@ -238,9 +256,15 @@ pub mod azure {
 
     /// Create managed disk snapshot
     pub async fn create_disk_snapshot(disk_name: &str, resource_group: &str) -> Result<String> {
-        tracing::info!("Creating Azure disk snapshot: {}/{}", resource_group, disk_name);
+        tracing::info!(
+            "Creating Azure disk snapshot: {}/{}",
+            resource_group,
+            disk_name
+        );
 
-        Err(Error::Unknown("Azure disk snapshot in progress".to_string()))
+        Err(Error::Unknown(
+            "Azure disk snapshot in progress".to_string(),
+        ))
     }
 
     /// Export VM to blob storage
@@ -266,7 +290,9 @@ pub mod gcp {
     pub async fn create_machine_image(instance_name: &str) -> Result<String> {
         tracing::info!("Creating GCP machine image: {}", instance_name);
 
-        Err(Error::Unknown("GCP machine image creation in progress".to_string()))
+        Err(Error::Unknown(
+            "GCP machine image creation in progress".to_string(),
+        ))
     }
 }
 

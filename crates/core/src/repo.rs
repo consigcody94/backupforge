@@ -59,16 +59,16 @@ impl RepoConfig {
             return Ok(None);
         }
         let password = password.ok_or_else(|| {
-            Error::AuthenticationFailed("This repository is encrypted; a password is required".to_string())
+            Error::AuthenticationFailed(
+                "This repository is encrypted; a password is required".to_string(),
+            )
         })?;
-        let kdf = self
-            .kdf
-            .as_ref()
-            .ok_or_else(|| Error::InvalidConfig("Encrypted repository has no KDF settings".to_string()))?;
-        let check = self
-            .key_check
-            .as_ref()
-            .ok_or_else(|| Error::InvalidConfig("Encrypted repository has no key check".to_string()))?;
+        let kdf = self.kdf.as_ref().ok_or_else(|| {
+            Error::InvalidConfig("Encrypted repository has no KDF settings".to_string())
+        })?;
+        let check = self.key_check.as_ref().ok_or_else(|| {
+            Error::InvalidConfig("Encrypted repository has no key check".to_string())
+        })?;
         let check = hex::decode(check)
             .map_err(|_| Error::InvalidConfig("Corrupt key check".to_string()))?;
 

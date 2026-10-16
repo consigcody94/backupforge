@@ -49,7 +49,9 @@ pub async fn read_resource(uri: &str, agent: &Option<BackupAgent>) -> Result<Vec
 }
 
 async fn read_snapshots(agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
-    let _agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
+    let _agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
 
     // In a real implementation, this would query the database
     Ok(vec![json!({
@@ -64,7 +66,9 @@ async fn read_snapshots(agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
 }
 
 async fn read_jobs(agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
-    let _agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
+    let _agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
 
     Ok(vec![json!({
         "uri": "backupforge://jobs",
@@ -78,7 +82,9 @@ async fn read_jobs(agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
 }
 
 async fn read_storage_stats(agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
-    let agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
+    let agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
 
     match agent.get_stats().await {
         Ok(stats) => Ok(vec![json!({
@@ -102,7 +108,9 @@ async fn read_storage_stats(agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
 }
 
 async fn read_config(agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
-    let _agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
+    let _agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
 
     Ok(vec![json!({
         "uri": "backupforge://config",
@@ -121,8 +129,13 @@ async fn read_config(agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
     })])
 }
 
-async fn read_snapshot_detail(snapshot_id: &str, agent: &Option<BackupAgent>) -> Result<Vec<Value>> {
-    let _agent = agent.as_ref().ok_or_else(|| anyhow!("Agent not initialized"))?;
+async fn read_snapshot_detail(
+    snapshot_id: &str,
+    agent: &Option<BackupAgent>,
+) -> Result<Vec<Value>> {
+    let _agent = agent
+        .as_ref()
+        .ok_or_else(|| anyhow!("Agent not initialized"))?;
 
     Ok(vec![json!({
         "uri": format!("backupforge://snapshots/{}", snapshot_id),

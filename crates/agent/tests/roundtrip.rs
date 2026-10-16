@@ -1,7 +1,9 @@
 //! End-to-end tests: real files in, real repository on disk, real restore.
 
 use backupforge_agent::BackupAgent;
-use backupforge_common::types::{BackupJob, BackupSource, FileMetadata, Snapshot, SnapshotId, SnapshotManifest};
+use backupforge_common::types::{
+    BackupJob, BackupSource, FileMetadata, Snapshot, SnapshotId, SnapshotManifest,
+};
 use backupforge_core::BackupConfig;
 use backupforge_storage::StorageConfig;
 use std::fs;
@@ -54,7 +56,11 @@ fn make_source(root: &Path) {
     fs::write(root.join("small.txt"), b"hello world").unwrap();
     fs::write(root.join("empty.bin"), b"").unwrap();
     fs::write(root.join("docs/secret.txt"), SECRET_MARKER.repeat(500)).unwrap();
-    fs::write(root.join("docs/nested/deeper/big.bin"), noise(3 * 1024 * 1024 + 123, 1)).unwrap();
+    fs::write(
+        root.join("docs/nested/deeper/big.bin"),
+        noise(3 * 1024 * 1024 + 123, 1),
+    )
+    .unwrap();
     fs::write(root.join("unicode-é-名前.txt"), "unicode name").unwrap();
 }
 
@@ -62,7 +68,11 @@ fn make_source(root: &Path) {
 fn tree(root: &Path) -> Vec<(String, Option<Vec<u8>>)> {
     let mut out = Vec::new();
     for entry in walkdir_sorted(root) {
-        let rel = entry.strip_prefix(root).unwrap().to_string_lossy().to_string();
+        let rel = entry
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
         if rel.is_empty() {
             continue;
         }
@@ -80,7 +90,10 @@ fn walkdir_sorted(root: &Path) -> Vec<PathBuf> {
     let mut i = 0;
     while i < all.len() {
         if all[i].is_dir() {
-            let mut kids: Vec<PathBuf> = fs::read_dir(&all[i]).unwrap().map(|e| e.unwrap().path()).collect();
+            let mut kids: Vec<PathBuf> = fs::read_dir(&all[i])
+                .unwrap()
+                .map(|e| e.unwrap().path())
+                .collect();
             kids.sort();
             all.extend(kids);
         }
@@ -91,13 +104,21 @@ fn walkdir_sorted(root: &Path) -> Vec<PathBuf> {
 }
 
 fn all_files(root: &Path) -> Vec<PathBuf> {
-    walkdir_sorted(root).into_iter().filter(|p| p.is_file()).collect()
+    walkdir_sorted(root)
+        .into_iter()
+        .filter(|p| p.is_file())
+        .collect()
 }
 
 async fn backup(source: &Path, repo: &Path, password: Option<&str>, encrypt: bool) -> Snapshot {
-    let agent = BackupAgent::open_repository(BackupConfig::default(), storage_cfg(repo), password, encrypt)
-        .await
-        .unwrap();
+    let agent = BackupAgent::open_repository(
+        BackupConfig::default(),
+        storage_cfg(repo),
+        password,
+        encrypt,
+    )
+    .await
+    .unwrap();
     agent.run_job(&job(source)).await.unwrap()
 }
 
@@ -112,7 +133,11 @@ fn chunk_files(repo: &Path) -> Vec<PathBuf> {
 #[tokio::test]
 async fn plaintext_round_trip_restores_identical_tree() {
     let tmp = TempDir::new().unwrap();
-    let (src, repo, out) = (tmp.path().join("src"), tmp.path().join("repo"), tmp.path().join("out"));
+    let (src, repo, out) = (
+        tmp.path().join("src"),
+        tmp.path().join("repo"),
+        tmp.path().join("out"),
+    );
     make_source(&src);
 
     let snap = backup(&src, &repo, None, false).await;
@@ -129,7 +154,11 @@ async fn plaintext_round_trip_restores_identical_tree() {
 #[tokio::test]
 async fn encrypted_round_trip_and_nothing_leaks_to_disk() {
     let tmp = TempDir::new().unwrap();
-    let (src, repo, out) = (tmp.path().join("src"), tmp.path().join("repo"), tmp.path().join("out"));
+    let (src, repo, out) = (
+        tmp.path().join("src"),
+        tmp.path().join("repo"),
+        tmp.path().join("out"),
+    );
     make_source(&src);
 
     backup(&src, &repo, Some(PASSWORD), true).await;
@@ -139,9 +168,21 @@ async fn encrypted_round_trip_and_nothing_leaks_to_disk() {
     for file in all_files(&repo) {
         let bytes = fs::read(&file).unwrap();
         let text = String::from_utf8_lossy(&bytes);
-        assert!(!text.contains(SECRET_MARKER), "content leaked in {}", file.display());
-        assert!(!text.contains("secret.txt"), "file name leaked in {}", file.display());
-        assert!(!text.contains("big.bin"), "file name leaked in {}", file.display());
+        assert!(
+            !text.contains(SECRET_MARKER),
+            "content leaked in {}",
+            file.display()
+        );
+        assert!(
+            !text.contains("secret.txt"),
+            "file name leaked in {}",
+            file.display()
+        );
+        assert!(
+            !text.contains("big.bin"),
+            "file name leaked in {}",
+            file.display()
+        );
     }
 
     let agent = open(&repo, Some(PASSWORD)).await.unwrap();
@@ -167,7 +208,13 @@ async fn existing_plaintext_repo_is_not_silently_reused_as_encrypted() {
     make_source(&src);
     backup(&src, &repo, None, false).await;
 
-    let result = BackupAgent::open_repository(BackupConfig::default(), storage_cfg(&repo), Some(PASSWORD), true).await;
+    let result = BackupAgent::open_repository(
+        BackupConfig::default(),
+        storage_cfg(&repo),
+        Some(PASSWORD),
+        true,
+    )
+    .await;
     assert!(result.is_err());
 }
 
@@ -189,7 +236,11 @@ async fn identical_backup_adds_no_new_chunks() {
 
 async fn corruption_case(encrypted: bool) {
     let tmp = TempDir::new().unwrap();
-    let (src, repo, out) = (tmp.path().join("src"), tmp.path().join("repo"), tmp.path().join("out"));
+    let (src, repo, out) = (
+        tmp.path().join("src"),
+        tmp.path().join("repo"),
+        tmp.path().join("out"),
+    );
     make_source(&src);
     let pw = if encrypted { Some(PASSWORD) } else { None };
     backup(&src, &repo, pw, encrypted).await;
@@ -261,7 +312,12 @@ async fn tampered_manifest_is_rejected() {
 
         let manifest = all_files(&repo.join("metadata"))
             .into_iter()
-            .find(|p| p.file_name().unwrap().to_string_lossy().starts_with("snapshot-"))
+            .find(|p| {
+                p.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with("snapshot-")
+            })
             .unwrap();
         let mut bytes = fs::read(&manifest).unwrap();
         let last = bytes.len() - 1;
@@ -269,8 +325,14 @@ async fn tampered_manifest_is_rejected() {
         fs::write(&manifest, bytes).unwrap();
 
         let agent = open(&repo, pw).await.unwrap();
-        assert!(agent.list_snapshots().await.unwrap().is_empty(), "encrypted={encrypted}");
-        assert!(agent.restore_snapshot(None, &tmp.path().join("out")).await.is_err());
+        assert!(
+            agent.list_snapshots().await.unwrap().is_empty(),
+            "encrypted={encrypted}"
+        );
+        assert!(agent
+            .restore_snapshot(None, &tmp.path().join("out"))
+            .await
+            .is_err());
     }
 }
 
@@ -310,7 +372,11 @@ async fn plant_manifest(agent: &BackupAgent, files: Vec<FileMetadata>) -> String
         .engine()
         .seal_blob("snapshot", &id, &serde_json::to_vec(&manifest).unwrap())
         .unwrap();
-    agent.storage().put_metadata(&format!("snapshot-{}", id), sealed).await.unwrap();
+    agent
+        .storage()
+        .put_metadata(&format!("snapshot-{}", id), sealed)
+        .await
+        .unwrap();
     id
 }
 
@@ -331,7 +397,14 @@ async fn hostile_manifest_paths_cannot_escape_the_target() {
     let repo = tmp.path().join("repo");
     let agent = open_new(&repo).await;
 
-    for (i, bad) in ["../escape.txt", "a/../../escape.txt", "/tmp/backupforge-abs-escape.txt"].iter().enumerate() {
+    for (i, bad) in [
+        "../escape.txt",
+        "a/../../escape.txt",
+        "/tmp/backupforge-abs-escape.txt",
+    ]
+    .iter()
+    .enumerate()
+    {
         let id = plant_manifest(&agent, vec![entry(bad, false)]).await;
         let target = tmp.path().join(format!("target{i}"));
         let result = agent.restore_snapshot(Some(&id), &target).await;
@@ -382,7 +455,11 @@ async fn unreadable_files_mark_the_snapshot_partial() {
     }
 
     let snap = backup(&src, &repo, None, false).await;
-    assert!(snap.tags.iter().any(|t| t == "partial:1"), "{:?}", snap.tags);
+    assert!(
+        snap.tags.iter().any(|t| t == "partial:1"),
+        "{:?}",
+        snap.tags
+    );
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o644)).unwrap();
 }
 
@@ -390,7 +467,11 @@ async fn unreadable_files_mark_the_snapshot_partial() {
 #[tokio::test]
 async fn symlinks_in_the_source_are_not_followed() {
     let tmp = TempDir::new().unwrap();
-    let (src, repo, out) = (tmp.path().join("src"), tmp.path().join("repo"), tmp.path().join("out"));
+    let (src, repo, out) = (
+        tmp.path().join("src"),
+        tmp.path().join("repo"),
+        tmp.path().join("out"),
+    );
     let outside = tmp.path().join("outside.txt");
     fs::create_dir_all(&src).unwrap();
     fs::write(&outside, SECRET_MARKER).unwrap();
@@ -410,15 +491,28 @@ async fn symlinks_in_the_source_are_not_followed() {
 async fn file_permissions_are_restored_without_setuid() {
     use std::os::unix::fs::PermissionsExt;
     let tmp = TempDir::new().unwrap();
-    let (src, repo, out) = (tmp.path().join("src"), tmp.path().join("repo"), tmp.path().join("out"));
+    let (src, repo, out) = (
+        tmp.path().join("src"),
+        tmp.path().join("repo"),
+        tmp.path().join("out"),
+    );
     fs::create_dir_all(&src).unwrap();
     fs::write(src.join("run.sh"), b"#!/bin/sh\n").unwrap();
     fs::set_permissions(src.join("run.sh"), fs::Permissions::from_mode(0o4755)).unwrap();
 
     backup(&src, &repo, None, false).await;
-    open(&repo, None).await.unwrap().restore_snapshot(None, &out).await.unwrap();
+    open(&repo, None)
+        .await
+        .unwrap()
+        .restore_snapshot(None, &out)
+        .await
+        .unwrap();
 
-    let mode = fs::metadata(out.join("run.sh")).unwrap().permissions().mode() & 0o7777;
+    let mode = fs::metadata(out.join("run.sh"))
+        .unwrap()
+        .permissions()
+        .mode()
+        & 0o7777;
     assert_eq!(mode, 0o755);
 }
 
@@ -426,12 +520,18 @@ async fn file_permissions_are_restored_without_setuid() {
 async fn restoring_a_missing_snapshot_fails_cleanly() {
     let tmp = TempDir::new().unwrap();
     let agent = open_new(&tmp.path().join("repo")).await;
-    assert!(agent.restore_snapshot(None, &tmp.path().join("out")).await.is_err());
+    assert!(agent
+        .restore_snapshot(None, &tmp.path().join("out"))
+        .await
+        .is_err());
     assert!(agent
         .restore_snapshot(Some(&Uuid::new_v4().to_string()), &tmp.path().join("out"))
         .await
         .is_err());
-    assert!(agent.restore_snapshot(Some("../../etc/passwd"), &tmp.path().join("out")).await.is_err());
+    assert!(agent
+        .restore_snapshot(Some("../../etc/passwd"), &tmp.path().join("out"))
+        .await
+        .is_err());
 }
 
 #[tokio::test]
@@ -439,6 +539,9 @@ async fn unsupported_sources_error_instead_of_pretending() {
     let tmp = TempDir::new().unwrap();
     let agent = open_new(&tmp.path().join("repo")).await;
     let mut j = job(tmp.path());
-    j.source = BackupSource::Redis { host: "localhost".into(), port: 6379 };
+    j.source = BackupSource::Redis {
+        host: "localhost".into(),
+        port: 6379,
+    };
     assert!(agent.run_job(&j).await.is_err());
 }

@@ -65,10 +65,14 @@ impl BackupAgent {
             repo.unlock(password)?
         } else if encrypt_if_new {
             let password = password.ok_or_else(|| {
-                Error::AuthenticationFailed("A password is required to create an encrypted repository".to_string())
+                Error::AuthenticationFailed(
+                    "A password is required to create an encrypted repository".to_string(),
+                )
             })?;
             let (repo, key) = RepoConfig::new_encrypted(password)?;
-            storage.put_metadata(REPO_CONFIG_KEY, repo.to_bytes()?).await?;
+            storage
+                .put_metadata(REPO_CONFIG_KEY, repo.to_bytes()?)
+                .await?;
             Some(key)
         } else {
             storage
@@ -108,7 +112,9 @@ impl BackupAgent {
         snapshot_id: Option<&str>,
         target_path: &Path,
     ) -> Result<RestoreSummary> {
-        self.fs_backup.restore_snapshot(snapshot_id, target_path).await
+        self.fs_backup
+            .restore_snapshot(snapshot_id, target_path)
+            .await
     }
 
     pub async fn verify_snapshot(&self, snapshot_id: Option<&str>) -> Result<VerifyReport> {

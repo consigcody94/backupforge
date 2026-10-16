@@ -1,11 +1,11 @@
-use backupforge_common::{Result, Error};
+use backupforge_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 /// Compression algorithms supported
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum CompressionAlgorithm {
     None,
-    Zstd(i32),  // Compression level (1-22)
+    Zstd(i32), // Compression level (1-22)
     Lz4,
 }
 
@@ -24,7 +24,10 @@ impl CompressionAlgorithm {
             0 => Ok(CompressionAlgorithm::None),
             1 => Ok(CompressionAlgorithm::Zstd(0)),
             2 => Ok(CompressionAlgorithm::Lz4),
-            other => Err(Error::Serialization(format!("Unknown compression tag {}", other))),
+            other => Err(Error::Serialization(format!(
+                "Unknown compression tag {}",
+                other
+            ))),
         }
     }
 }
@@ -57,10 +60,8 @@ impl Compressor {
         match self.algorithm {
             CompressionAlgorithm::None => Ok(data.to_vec()),
 
-            CompressionAlgorithm::Zstd(level) => {
-                zstd::bulk::compress(data, level)
-                    .map_err(|e| Error::Unknown(format!("Zstd compression failed: {}", e)))
-            }
+            CompressionAlgorithm::Zstd(level) => zstd::bulk::compress(data, level)
+                .map_err(|e| Error::Unknown(format!("Zstd compression failed: {}", e))),
 
             CompressionAlgorithm::Lz4 => {
                 let mut compressed = Vec::new();
@@ -68,11 +69,10 @@ impl Compressor {
                     .build(&mut compressed)
                     .map_err(|e| Error::Unknown(format!("LZ4 encoder creation failed: {}", e)))?;
 
-                std::io::copy(&mut std::io::Cursor::new(data), &mut encoder)
-                    .map_err(|e| Error::Io(e))?;
+                std::io::copy(&mut std::io::Cursor::new(data), &mut encoder).map_err(Error::Io)?;
 
                 let (_output, result) = encoder.finish();
-                result.map_err(|e| Error::Io(e))?;
+                result.map_err(Error::Io)?;
 
                 Ok(compressed)
             }
@@ -84,15 +84,12 @@ impl Compressor {
         match self.algorithm {
             CompressionAlgorithm::None => Ok(data.to_vec()),
 
-            CompressionAlgorithm::Zstd(_) => {
-                zstd::bulk::decompress(data, MAX_DECOMPRESSED_CHUNK)
-                    .map_err(|e| Error::Unknown(format!("Zstd decompression failed: {}", e)))
-            }
+            CompressionAlgorithm::Zstd(_) => zstd::bulk::decompress(data, MAX_DECOMPRESSED_CHUNK)
+                .map_err(|e| Error::Unknown(format!("Zstd decompression failed: {}", e))),
 
             CompressionAlgorithm::Lz4 => {
                 let mut decompressed = Vec::new();
-                let mut decoder = lz4::Decoder::new(std::io::Cursor::new(data))
-                    .map_err(|e| Error::Io(e))?;
+                let decoder = lz4::Decoder::new(std::io::Cursor::new(data)).map_err(Error::Io)?;
 
                 use std::io::Read;
                 decoder
@@ -101,7 +98,9 @@ impl Compressor {
                     .map_err(Error::Io)?;
 
                 if decompressed.len() > MAX_DECOMPRESSED_CHUNK {
-                    return Err(Error::Serialization("Decompressed chunk too large".to_string()));
+                    return Err(Error::Serialization(
+                        "Decompressed chunk too large".to_string(),
+                    ));
                 }
 
                 Ok(decompressed)

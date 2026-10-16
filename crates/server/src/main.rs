@@ -1,6 +1,5 @@
 use backupforge_server::{create_router, AppState, ServerConfig};
 use std::net::SocketAddr;
-use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

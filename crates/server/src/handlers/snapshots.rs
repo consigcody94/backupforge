@@ -21,14 +21,14 @@ pub async fn list_snapshots(
 
 pub async fn get_snapshot(
     State(_state): State<AppState>,
-    Path(id): Path<String>,
+    Path(_id): Path<String>,
 ) -> Result<Json<Snapshot>, StatusCode> {
     Err(StatusCode::NOT_FOUND)
 }
 
 pub async fn delete_snapshot(
     State(_state): State<AppState>,
-    Path(id): Path<String>,
+    Path(_id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
     Ok(StatusCode::NO_CONTENT)
 }

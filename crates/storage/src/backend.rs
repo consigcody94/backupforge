@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use backupforge_common::{types::ChunkId, Error, Result};
+use backupforge_common::{types::ChunkId, Result};
 use serde::{Deserialize, Serialize};
 
 /// Storage backend configuration

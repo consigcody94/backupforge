@@ -147,7 +147,8 @@ impl FilesystemBackup {
             files,
         };
         let id = snapshot.id.0.to_string();
-        let json = serde_json::to_vec(&manifest).map_err(|e| Error::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_vec(&manifest).map_err(|e| Error::Serialization(e.to_string()))?;
         let sealed = self.engine.seal_blob("snapshot", &id, &json)?;
         self.storage
             .put_metadata(&format!("{}{}", SNAPSHOT_KEY_PREFIX, id), sealed)
@@ -244,11 +245,9 @@ impl FilesystemBackup {
                     other => other,
                 }),
             None => {
-                let latest = self
-                    .list_snapshots()
-                    .await?
-                    .pop()
-                    .ok_or_else(|| Error::SnapshotNotFound("no snapshots in repository".to_string()))?;
+                let latest = self.list_snapshots().await?.pop().ok_or_else(|| {
+                    Error::SnapshotNotFound("no snapshots in repository".to_string())
+                })?;
                 self.read_manifest(&format!("{}{}", SNAPSHOT_KEY_PREFIX, latest.id.0))
                     .await
             }
@@ -418,7 +417,10 @@ mod tests {
 
     #[test]
     fn sanitize_accepts_relative_and_rejects_traversal() {
-        assert_eq!(sanitize_relative("a/b.txt").unwrap(), PathBuf::from("a/b.txt"));
+        assert_eq!(
+            sanitize_relative("a/b.txt").unwrap(),
+            PathBuf::from("a/b.txt")
+        );
         assert_eq!(sanitize_relative("./a").unwrap(), PathBuf::from("a"));
         for bad in ["../x", "a/../../x", "/etc/passwd", "", ".", ".."] {
             assert!(sanitize_relative(bad).is_err(), "{bad:?}");

@@ -81,19 +81,14 @@ impl StorageBackend for S3Storage {
             ..Default::default()
         };
 
-        let result = self
-            .client
-            .get_object(request)
-            .await
-            .map_err(|e| match e {
-                RusotoError::Service(_) => Error::ChunkNotFound(chunk_id.0.clone()),
-                _ => Error::Storage(format!("S3 get failed: {}", e)),
-            })?;
+        let result = self.client.get_object(request).await.map_err(|e| match e {
+            RusotoError::Service(_) => Error::ChunkNotFound(chunk_id.0.clone()),
+            _ => Error::Storage(format!("S3 get failed: {}", e)),
+        })?;
 
         let mut data = Vec::new();
         if let Some(body) = result.body {
-            body
-                .into_async_read()
+            body.into_async_read()
                 .read_to_end(&mut data)
                 .await
                 .map_err(|e| Error::Storage(format!("Failed to read S3 body: {}", e)))?;
@@ -209,8 +204,7 @@ impl StorageBackend for S3Storage {
 
         let mut data = Vec::new();
         if let Some(body) = result.body {
-            body
-                .into_async_read()
+            body.into_async_read()
                 .read_to_end(&mut data)
                 .await
                 .map_err(|e| Error::Storage(format!("Failed to read S3 metadata: {}", e)))?;

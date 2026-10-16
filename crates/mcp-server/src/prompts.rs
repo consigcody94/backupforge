@@ -43,9 +43,7 @@ pub fn get_prompt(prompt_name: &str, arguments: &Value) -> Result<Vec<Value>> {
 }
 
 fn create_backup_plan_prompt(arguments: &Value) -> Result<Vec<Value>> {
-    let system_type = arguments["system_type"]
-        .as_str()
-        .unwrap_or("personal");
+    let system_type = arguments["system_type"].as_str().unwrap_or("personal");
 
     let message = match system_type {
         "personal" => {
@@ -94,7 +92,7 @@ fn create_backup_plan_prompt(arguments: &Value) -> Result<Vec<Value>> {
             - Documentation and runbooks\n\
             - BackupForge deployment strategy"
         }
-        _ => "Please specify system_type: personal, small_business, or enterprise"
+        _ => "Please specify system_type: personal, small_business, or enterprise",
     };
 
     Ok(vec![
@@ -197,7 +195,7 @@ fn disaster_recovery_prompt(arguments: &Value) -> Result<Vec<Value>> {
             - Maintain spare hardware\n\
             - Regular backup testing"
         }
-        _ => "Please specify scenario: data_loss, ransomware, or hardware_failure"
+        _ => "Please specify scenario: data_loss, ransomware, or hardware_failure",
     };
 
     Ok(vec![

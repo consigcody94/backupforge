@@ -8,7 +8,6 @@ use crate::backend::{StorageBackend, StorageStats};
 
 /// Local filesystem storage backend
 pub struct LocalStorage {
-    base_path: PathBuf,
     chunks_path: PathBuf,
     metadata_path: PathBuf,
 }
@@ -24,7 +23,6 @@ impl LocalStorage {
         fs::create_dir_all(&metadata_path).await?;
 
         Ok(Self {
-            base_path,
             chunks_path,
             metadata_path,
         })
