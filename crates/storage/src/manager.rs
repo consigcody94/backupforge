@@ -72,6 +72,10 @@ impl StorageManager {
         self.backend.get_metadata(key).await
     }
 
+    pub async fn list_metadata(&self, prefix: &str) -> Result<Vec<String>> {
+        self.backend.list_metadata(prefix).await
+    }
+
     pub async fn stats(&self) -> Result<StorageStats> {
         self.backend.stats().await
     }

@@ -33,6 +33,8 @@ argon2 = "0.5"
 sha2 = "0.10"
 blake3 = "1.5"
 rand = "0.8"
+zeroize = { version = "1.8", features = ["derive"] }
+hex = "0.4"
 
 # Compression
 zstd = "0.13"

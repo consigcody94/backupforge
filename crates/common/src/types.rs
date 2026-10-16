@@ -63,6 +63,16 @@ pub struct FileMetadata {
     pub chunk_ids: Vec<ChunkId>,
 }
 
+/// Everything needed to restore one snapshot: its summary plus every file entry.
+///
+/// File paths are relative to the backed-up root and are validated again on
+/// restore, since a manifest read from storage is untrusted input.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotManifest {
+    pub snapshot: Snapshot,
+    pub files: Vec<FileMetadata>,
+}
+
 /// Backup job configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupJob {

@@ -9,6 +9,29 @@ pub enum CompressionAlgorithm {
     Lz4,
 }
 
+impl CompressionAlgorithm {
+    /// One-byte tag stored with each chunk so restores do not depend on config.
+    pub fn tag(&self) -> u8 {
+        match self {
+            CompressionAlgorithm::None => 0,
+            CompressionAlgorithm::Zstd(_) => 1,
+            CompressionAlgorithm::Lz4 => 2,
+        }
+    }
+
+    pub fn from_tag(tag: u8) -> Result<Self> {
+        match tag {
+            0 => Ok(CompressionAlgorithm::None),
+            1 => Ok(CompressionAlgorithm::Zstd(0)),
+            2 => Ok(CompressionAlgorithm::Lz4),
+            other => Err(Error::Serialization(format!("Unknown compression tag {}", other))),
+        }
+    }
+}
+
+/// Upper bound on one decompressed chunk, to stop decompression bombs.
+pub const MAX_DECOMPRESSED_CHUNK: usize = 128 * 1024 * 1024;
+
 impl Default for CompressionAlgorithm {
     fn default() -> Self {
         Self::Zstd(3) // Level 3 is a good balance of speed/ratio
@@ -23,6 +46,10 @@ pub struct Compressor {
 impl Compressor {
     pub fn new(algorithm: CompressionAlgorithm) -> Self {
         Self { algorithm }
+    }
+
+    pub fn algorithm(&self) -> CompressionAlgorithm {
+        self.algorithm
     }
 
     /// Compress data
@@ -58,7 +85,7 @@ impl Compressor {
             CompressionAlgorithm::None => Ok(data.to_vec()),
 
             CompressionAlgorithm::Zstd(_) => {
-                zstd::bulk::decompress(data, 128 * 1024 * 1024) // Max 128MB decompressed
+                zstd::bulk::decompress(data, MAX_DECOMPRESSED_CHUNK)
                     .map_err(|e| Error::Unknown(format!("Zstd decompression failed: {}", e)))
             }
 
@@ -67,8 +94,15 @@ impl Compressor {
                 let mut decoder = lz4::Decoder::new(std::io::Cursor::new(data))
                     .map_err(|e| Error::Io(e))?;
 
-                std::io::copy(&mut decoder, &mut decompressed)
-                    .map_err(|e| Error::Io(e))?;
+                use std::io::Read;
+                decoder
+                    .take(MAX_DECOMPRESSED_CHUNK as u64 + 1)
+                    .read_to_end(&mut decompressed)
+                    .map_err(Error::Io)?;
+
+                if decompressed.len() > MAX_DECOMPRESSED_CHUNK {
+                    return Err(Error::Serialization("Decompressed chunk too large".to_string()));
+                }
 
                 Ok(decompressed)
             }
