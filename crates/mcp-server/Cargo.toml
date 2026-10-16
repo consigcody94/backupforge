@@ -4,16 +4,17 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+publish = false
 
 [[bin]]
 name = "backupforge-mcp"
 path = "src/main.rs"
 
 [dependencies]
-backupforge-common = { path = "../common" }
-backupforge-core = { path = "../core" }
-backupforge-storage = { path = "../storage" }
-backupforge-agent = { path = "../agent" }
+backupforge-common = { path = "../common", version = "0.1.0" }
+backupforge-core = { path = "../core", version = "0.1.0" }
+backupforge-storage = { path = "../storage", version = "0.1.0" }
+backupforge-agent = { path = "../agent", version = "0.1.0" }
 
 tokio = { workspace = true }
 serde = { workspace = true }

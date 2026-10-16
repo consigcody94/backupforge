@@ -214,6 +214,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "backupforge"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "backupforge-agent",
+ "backupforge-common",
+ "backupforge-core",
+ "backupforge-storage",
+ "chrono",
+ "clap",
+ "rpassword",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "backupforge-agent"
 version = "0.1.0"
 dependencies = [
@@ -232,27 +253,6 @@ dependencies = [
  "tracing",
  "uuid",
  "walkdir",
-]
-
-[[package]]
-name = "backupforge-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "backupforge-agent",
- "backupforge-common",
- "backupforge-core",
- "backupforge-storage",
- "chrono",
- "clap",
- "rpassword",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
@@ -278,7 +278,6 @@ dependencies = [
  "argon2",
  "async-trait",
  "backupforge-common",
- "bincode",
  "blake3",
  "bytes",
  "chrono",
@@ -387,15 +386,6 @@ dependencies = [
  "getrandom 0.2.17",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "bincode"
-version = "1.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
-dependencies = [
- "serde",
 ]
 
 [[package]]

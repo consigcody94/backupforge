@@ -1,113 +1,99 @@
 name: Release
 
+# Push a tag like v0.1.0. The workflow builds binaries, writes checksums, an SBOM
+# and build-provenance attestations, then creates a DRAFT release. Review it and
+# publish it by hand.
+
 on:
   push:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-
-  build-release:
-    name: Build Release
-    needs: create-release
+  build:
+    name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: true
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            name: linux-x86_64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            name: linux-aarch64
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            name: macos-x86_64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            name: macos-aarch64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            name: windows-x86_64
-
+          - { os: ubuntu-latest,    target: x86_64-unknown-linux-gnu,  name: linux-x86_64 }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, name: linux-aarch64 }
+          - { os: macos-latest,     target: aarch64-apple-darwin,      name: macos-aarch64 }
+          - { os: macos-latest,     target: x86_64-apple-darwin,       name: macos-x86_64 }
+          - { os: windows-latest,   target: x86_64-pc-windows-msvc,    name: windows-x86_64 }
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
           targets: ${{ matrix.target }}
-
+      - name: Test
+        if: matrix.target != 'x86_64-apple-darwin'
+        run: cargo test --workspace --locked
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Package (Unix)
-        if: matrix.os != 'windows-latest'
+        run: cargo build --release --locked -p backupforge --target ${{ matrix.target }}
+      - name: Package (unix)
+        if: runner.os != 'Windows'
         run: |
-          cd target/${{ matrix.target }}/release
-          tar czf backupforge-${{ matrix.name }}.tar.gz backupforge
-          shasum -a 256 backupforge-${{ matrix.name }}.tar.gz > backupforge-${{ matrix.name }}.tar.gz.sha256
-
-      - name: Package (Windows)
-        if: matrix.os == 'windows-latest'
+          mkdir dist
+          tar -C target/${{ matrix.target }}/release -czf dist/backupforge-${{ github.ref_name }}-${{ matrix.name }}.tar.gz backupforge
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          cd target/${{ matrix.target }}/release
-          7z a backupforge-${{ matrix.name }}.zip backupforge.exe
-          certutil -hashfile backupforge-${{ matrix.name }}.zip SHA256 > backupforge-${{ matrix.name }}.zip.sha256
-
-      - name: Upload Release Asset (Unix)
-        if: matrix.os != 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          New-Item -ItemType Directory dist | Out-Null
+          Compress-Archive -Path target/${{ matrix.target }}/release/backupforge.exe -DestinationPath dist/backupforge-${{ github.ref_name }}-${{ matrix.name }}.zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/backupforge-${{ matrix.name }}.tar.gz
-          asset_name: backupforge-${{ matrix.name }}.tar.gz
-          asset_content_type: application/gzip
+          name: dist-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
 
-      - name: Upload Release Asset (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/backupforge-${{ matrix.name }}.zip
-          asset_name: backupforge-${{ matrix.name }}.zip
-          asset_content_type: application/zip
-
-  publish-crate:
-    name: Publish to crates.io
-    needs: build-release
+  release:
+    name: Checksums, SBOM, attestations, draft release
+    needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Publish to crates.io
-        run: cargo publish --token ${{ secrets.CARGO_TOKEN }}
-        continue-on-error: true
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - name: SBOM
+        run: |
+          cargo install cargo-cyclonedx --locked
+          cargo cyclonedx --format json --override-filename backupforge.cdx
+          mv crates/cli/backupforge.cdx.json dist/backupforge-${{ github.ref_name }}.cdx.json
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: 'dist/*'
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/* \
+            --draft --verify-tag \
+            --title "${{ github.ref_name }}" \
+            --notes "See CHANGELOG.md. Verify a download with: gh attestation verify <file> --repo ${{ github.repository }}"

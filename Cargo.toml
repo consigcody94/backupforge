@@ -16,6 +16,10 @@ edition = "2021"
 authors = ["BackupForge Contributors"]
 license = "Apache-2.0"
 repository = "https://github.com/consigcody94/backupforge"
+homepage = "https://github.com/consigcody94/backupforge"
+keywords = ["backup", "deduplication", "encryption", "cli"]
+categories = ["command-line-utilities", "filesystem", "cryptography"]
+readme = "README.md"
 
 [workspace.dependencies]
 # Async runtime
@@ -25,7 +29,6 @@ async-trait = "0.1"
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-bincode = "1.3"
 
 # Cryptography
 aes-gcm = "0.10"
