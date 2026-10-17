@@ -456,8 +456,16 @@ fn restore_blocking(
             }
             ensure_parent(&root, &rel)?;
             clear_existing(&root, &rel)?;
-            root.symlink(link, &rel)?;
-            summary.symlinks += 1;
+            if create_symlink(&root, link, &rel)? {
+                summary.symlinks += 1;
+            } else {
+                tracing::warn!(
+                    "Not restoring link {} -> {}: symbolic links are not restored on this platform",
+                    entry.path,
+                    link
+                );
+                summary.skipped_links += 1;
+            }
         } else {
             ensure_parent(&root, &rel)?;
             summary.bytes += write_file(handle, storage, engine, &root, entry, &rel)?;
@@ -559,6 +567,19 @@ fn link_stays_inside(target: &str, link_dir_depth: usize) -> bool {
         }
     }
     true
+}
+
+/// Create a symbolic link inside `root`. Returns `false` where this platform does
+/// not support it (Windows needs a different call per target type and privileges).
+#[cfg(unix)]
+fn create_symlink(root: &Dir, target: &str, rel: &Path) -> Result<bool> {
+    root.symlink(target, rel)?;
+    Ok(true)
+}
+
+#[cfg(not(unix))]
+fn create_symlink(_root: &Dir, _target: &str, _rel: &Path) -> Result<bool> {
+    Ok(false)
 }
 
 fn ensure_parent(root: &Dir, rel: &Path) -> Result<()> {
