@@ -235,20 +235,14 @@ impl DatabaseBackup {
         tracing::info!("Backing up MongoDB database: {}@{}", database, host);
 
         let dump_path = format!("/tmp/mongo_{}_{}", database, chrono::Utc::now().timestamp());
+        let port_str = port.to_string();
 
         let mut args = vec![
-            "--host",
-            host,
-            "--port",
-            &port.to_string(),
-            "--db",
-            database,
-            "--out",
-            &dump_path,
+            "--host", host, "--port", &port_str, "--db", database, "--out", &dump_path,
         ];
 
-        let mut username_str = String::new();
-        let mut password_str = String::new();
+        let username_str;
+        let password_str;
 
         if let Some(user) = username {
             username_str = user.to_string();
@@ -290,7 +284,8 @@ impl DatabaseBackup {
         // Redis backup is typically done by copying the RDB or AOF file
         // Or using BGSAVE command
 
-        let mut args = vec!["-h", host, "-p", &port.to_string(), "BGSAVE"];
+        let port_str = port.to_string();
+        let mut args = vec!["-h", host, "-p", &port_str, "BGSAVE"];
 
         let password_str;
         if let Some(pass) = password {

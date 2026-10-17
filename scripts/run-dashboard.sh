@@ -10,9 +10,8 @@ echo ""
 
 # Check for Rust
 if ! command -v cargo &> /dev/null; then
-    echo "❌ Rust not found. Installing..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    source $HOME/.cargo/env
+    echo "❌ Rust toolchain (cargo) not found. Please install Rust first (https://rustup.rs)."
+    exit 1
 fi
 
 echo "✓ Rust found: $(rustc --version)"

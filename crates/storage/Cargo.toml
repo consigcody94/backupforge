@@ -12,8 +12,8 @@ readme = "../../README.md"
 
 [features]
 default = []
-# Unfinished S3/B2 backend on the unmaintained rusoto SDK; credentials are not wired up.
-s3 = ["dep:rusoto_core", "dep:rusoto_s3"]
+# Unfinished S3/B2 backend stub; off by default until a maintained SDK is wired up.
+s3 = []
 
 [dependencies]
 backupforge-common = { path = "../common", version = "0.1.0" }
@@ -27,10 +27,6 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 bytes = { workspace = true }
 uuid = { workspace = true }
-
-# S3 support
-rusoto_core = { workspace = true, optional = true }
-rusoto_s3 = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

@@ -1,4 +1,4 @@
-use backupforge_common::{types::Snapshot, Error, Result};
+use backupforge_common::{Error, Result};
 use backupforge_core::BackupEngine;
 use backupforge_storage::StorageManager;
 use ssh2::Session;
@@ -9,13 +9,16 @@ use std::sync::Arc;
 
 /// SSH-based remote backup
 pub struct SshBackup {
-    engine: Arc<BackupEngine>,
-    storage: Arc<StorageManager>,
+    _engine: Arc<BackupEngine>,
+    _storage: Arc<StorageManager>,
 }
 
 impl SshBackup {
     pub fn new(engine: Arc<BackupEngine>, storage: Arc<StorageManager>) -> Self {
-        Self { engine, storage }
+        Self {
+            _engine: engine,
+            _storage: storage,
+        }
     }
 
     /// Connect to remote host via SSH
@@ -113,8 +116,8 @@ mod tests {
 
     #[test]
     fn test_ssh_backup_creation() {
-        let engine = Arc::new(BackupEngine::new(Default::default()));
-        let storage_config = backupforge_storage::StorageConfig::Local {
+        let _engine = Arc::new(BackupEngine::new(Default::default()));
+        let _storage_config = backupforge_storage::StorageConfig::Local {
             path: "/tmp/test".to_string(),
         };
 

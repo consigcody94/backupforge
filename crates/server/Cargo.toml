@@ -29,12 +29,5 @@ uuid = { workspace = true }
 rand = { workspace = true }
 chrono = { workspace = true }
 
-# Database
-sqlx = { workspace = true }
-
-# Auth
-jsonwebtoken = "9.3"
-bcrypt = "0.15"
-
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

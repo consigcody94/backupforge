@@ -84,7 +84,7 @@ impl ProxmoxBackup {
     }
 
     /// Get VM/container status
-    pub async fn get_vm_status(&self, vmid: &str) -> Result<String> {
+    pub async fn get_vm_status(&self, _vmid: &str) -> Result<String> {
         // Would query Proxmox API for status
         Ok("unknown".to_string())
     }
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_proxmox_backup_creation() {
-        let config = ProxmoxConfig {
+        let _config = ProxmoxConfig {
             host: "pve.example.com".to_string(),
             port: 8006,
             username: "root@pam".to_string(),
@@ -140,8 +140,8 @@ mod tests {
             verify_ssl: false,
         };
 
-        let engine = Arc::new(BackupEngine::new(Default::default()));
-        let storage_config = backupforge_storage::StorageConfig::Local {
+        let _engine = Arc::new(BackupEngine::new(Default::default()));
+        let _storage_config = backupforge_storage::StorageConfig::Local {
             path: "/tmp/test".to_string(),
         };
 

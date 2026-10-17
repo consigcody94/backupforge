@@ -119,7 +119,7 @@ impl DockerBackup {
         }
 
         // Get volume mountpoint
-        let inspect_json = String::from_utf8_lossy(&inspect.stdout);
+        let _inspect_json = String::from_utf8_lossy(&inspect.stdout);
         // Parse JSON to get Mountpoint (simplified - would use serde_json in production)
 
         Err(Error::Unknown(
@@ -130,7 +130,7 @@ impl DockerBackup {
     /// List Docker volumes
     pub fn list_volumes(&self) -> Result<Vec<String>> {
         let output = Command::new("docker")
-            .args(&["volume", "ls", "--format", "{{.Name}}"])
+            .args(["volume", "ls", "--format", "{{.Name}}"])
             .output()
             .map_err(|e| Error::Unknown(format!("Failed to list volumes: {}", e)))?;
 
@@ -180,9 +180,9 @@ mod tests {
 
     #[test]
     fn test_docker_backup_creation() {
-        let config = DockerConfig { docker_host: None };
-        let engine = Arc::new(BackupEngine::new(Default::default()));
-        let storage_config = backupforge_storage::StorageConfig::Local {
+        let _config = DockerConfig { docker_host: None };
+        let _engine = Arc::new(BackupEngine::new(Default::default()));
+        let _storage_config = backupforge_storage::StorageConfig::Local {
             path: "/tmp/test".to_string(),
         };
         // Would need async runtime to properly test

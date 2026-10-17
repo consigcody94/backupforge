@@ -25,11 +25,9 @@ if command -v cargo &> /dev/null; then
     RUST_VERSION=$(cargo --version | awk '{print $2}')
     echo -e "${GREEN}✓ Found Rust $RUST_VERSION${NC}"
 else
-    echo -e "${YELLOW}⚠ Rust not found${NC}"
-    echo "Installing Rust..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    source $HOME/.cargo/env
-    echo -e "${GREEN}✓ Rust installed${NC}"
+    echo -e "${RED}❌ Rust toolchain (cargo) not found${NC}"
+    echo "Please install Rust first (https://rustup.rs) and re-run this script."
+    exit 1
 fi
 
 # Check for build dependencies
