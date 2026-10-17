@@ -1,7 +1,5 @@
 [graph]
-# The optional `s3` feature pulls in the unmaintained rusoto SDK. It is off by
-# default and not shipped, so it is excluded from the default policy check.
-all-features = false
+all-features = true
 
 [advisories]
 yanked = "deny"

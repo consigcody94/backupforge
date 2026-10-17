@@ -8,14 +8,19 @@ pub mod agent;
 pub mod filesystem;
 
 #[cfg(feature = "experimental-sources")]
+#[allow(dead_code, clippy::all)]
 pub mod cloudvm;
 #[cfg(feature = "experimental-sources")]
+#[allow(dead_code, clippy::all)]
 pub mod database;
 #[cfg(feature = "experimental-sources")]
+#[allow(dead_code, clippy::all)]
 pub mod docker;
 #[cfg(feature = "experimental-sources")]
+#[allow(dead_code, clippy::all)]
 pub mod proxmox;
 #[cfg(feature = "experimental-sources")]
+#[allow(dead_code, clippy::all)]
 pub mod ssh;
 
 pub use agent::BackupAgent;

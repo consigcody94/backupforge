@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-16
+
 ### Fixed
 - The workspace did not compile and CI had never passed; it now builds with
   `cargo clippy -- -D warnings` clean.
@@ -18,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secret default is random per process and the server binds loopback only.
 - Local storage accepted names containing path separators and wrote files
   non-atomically.
+- Removed unused/unmaintained crates (`rusoto_*`, `sqlx`, `jsonwebtoken`, `bcrypt`,
+  `openssl`) that pulled OSV/RustSec advisories into `Cargo.lock`, and pinned
+  container base images by SHA-256 digest.
 
 ### Added
 - Working local backup, restore, list, verify and stats with end-to-end tests.

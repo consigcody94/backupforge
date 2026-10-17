@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.75-slim as builder
+FROM rust:1.98-slim@sha256:4cd829461bd5c4d511c32e269da9cb8929223b666519d8004e35fc8d1d771ab7 AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -10,14 +10,14 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy manifests
-COPY Cargo.toml Cargo.toml
+COPY Cargo.toml Cargo.lock ./
 COPY crates crates
 
 # Build dependencies (cached layer)
-RUN cargo build --release
+RUN cargo build --release --locked
 
 # Runtime stage
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
