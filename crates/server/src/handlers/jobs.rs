@@ -29,14 +29,14 @@ pub async fn create_job(
 
 pub async fn get_job(
     State(_state): State<AppState>,
-    Path(id): Path<String>,
+    Path(_id): Path<String>,
 ) -> Result<Json<BackupJob>, StatusCode> {
     Err(StatusCode::NOT_FOUND)
 }
 
 pub async fn delete_job(
     State(_state): State<AppState>,
-    Path(id): Path<String>,
+    Path(_id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
     Ok(StatusCode::NO_CONTENT)
 }

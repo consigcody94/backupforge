@@ -8,7 +8,7 @@ pub struct Database {
 }
 
 impl Database {
-    pub async fn new(database_url: &str) -> Result<Self> {
+    pub async fn new(_database_url: &str) -> Result<Self> {
         // Would create database connection
         Ok(Self {})
     }

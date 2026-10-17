@@ -1,12 +1,11 @@
+mod prompts;
+mod resources;
 mod server;
 mod tools;
-mod resources;
-mod prompts;
 
 use anyhow::Result;
 use serde_json::json;
 use std::io::{self, BufRead, Write};
-use tracing_subscriber;
 
 use server::McpServer;
 

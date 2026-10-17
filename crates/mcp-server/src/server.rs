@@ -6,20 +6,18 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::prompts;
 use crate::resources;
 use crate::tools;
-use crate::prompts;
 
 pub struct McpServer {
     agent: Arc<RwLock<Option<BackupAgent>>>,
-    config_path: Option<String>,
 }
 
 impl McpServer {
     pub async fn new() -> Result<Self> {
         Ok(Self {
             agent: Arc::new(RwLock::new(None)),
-            config_path: None,
         })
     }
 
@@ -46,7 +44,7 @@ impl McpServer {
         }
     }
 
-    async fn handle_initialize(&mut self, id: Value, request: &Value) -> Value {
+    async fn handle_initialize(&mut self, id: Value, _request: &Value) -> Value {
         tracing::info!("Initializing MCP server");
 
         // Initialize default agent with local storage

@@ -43,11 +43,7 @@ impl ProxmoxBackup {
         // 3. Backup disk images using vzdump or similar
         // 4. Process the backup through our engine
 
-        tracing::info!(
-            "Backing up VM {} from node {}",
-            vmid,
-            self.config.node
-        );
+        tracing::info!("Backing up VM {} from node {}", vmid, self.config.node);
 
         // Placeholder implementation
         Err(Error::Unknown(

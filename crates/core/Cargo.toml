@@ -4,19 +4,24 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+description = "Chunking, compression, encryption and repository format for BackupForge"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
 
 [dependencies]
-backupforge-common = { path = "../common" }
+backupforge-common = { path = "../common", version = "0.1.0" }
 
 tokio = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-bincode = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 bytes = { workspace = true }
+chrono = { workspace = true }
 
 # Cryptography
 aes-gcm = { workspace = true }
@@ -24,10 +29,13 @@ argon2 = { workspace = true }
 sha2 = { workspace = true }
 blake3 = { workspace = true }
 rand = { workspace = true }
+zeroize = { workspace = true }
+hex = { workspace = true }
 
 # Compression
 zstd = { workspace = true }
 lz4 = { workspace = true }
 
 [dev-dependencies]
+tempfile = "3.10"
 tokio = { workspace = true, features = ["test-util"] }

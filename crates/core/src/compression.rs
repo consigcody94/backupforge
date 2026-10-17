@@ -1,13 +1,39 @@
-use backupforge_common::{Result, Error};
+use backupforge_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 /// Compression algorithms supported
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum CompressionAlgorithm {
     None,
-    Zstd(i32),  // Compression level (1-22)
+    Zstd(i32), // Compression level (1-22)
     Lz4,
 }
+
+impl CompressionAlgorithm {
+    /// One-byte tag stored with each chunk so restores do not depend on config.
+    pub fn tag(&self) -> u8 {
+        match self {
+            CompressionAlgorithm::None => 0,
+            CompressionAlgorithm::Zstd(_) => 1,
+            CompressionAlgorithm::Lz4 => 2,
+        }
+    }
+
+    pub fn from_tag(tag: u8) -> Result<Self> {
+        match tag {
+            0 => Ok(CompressionAlgorithm::None),
+            1 => Ok(CompressionAlgorithm::Zstd(0)),
+            2 => Ok(CompressionAlgorithm::Lz4),
+            other => Err(Error::Serialization(format!(
+                "Unknown compression tag {}",
+                other
+            ))),
+        }
+    }
+}
+
+/// Upper bound on one decompressed chunk, to stop decompression bombs.
+pub const MAX_DECOMPRESSED_CHUNK: usize = 128 * 1024 * 1024;
 
 impl Default for CompressionAlgorithm {
     fn default() -> Self {
@@ -25,15 +51,17 @@ impl Compressor {
         Self { algorithm }
     }
 
+    pub fn algorithm(&self) -> CompressionAlgorithm {
+        self.algorithm
+    }
+
     /// Compress data
     pub fn compress(&self, data: &[u8]) -> Result<Vec<u8>> {
         match self.algorithm {
             CompressionAlgorithm::None => Ok(data.to_vec()),
 
-            CompressionAlgorithm::Zstd(level) => {
-                zstd::bulk::compress(data, level)
-                    .map_err(|e| Error::Unknown(format!("Zstd compression failed: {}", e)))
-            }
+            CompressionAlgorithm::Zstd(level) => zstd::bulk::compress(data, level)
+                .map_err(|e| Error::Unknown(format!("Zstd compression failed: {}", e))),
 
             CompressionAlgorithm::Lz4 => {
                 let mut compressed = Vec::new();
@@ -41,11 +69,10 @@ impl Compressor {
                     .build(&mut compressed)
                     .map_err(|e| Error::Unknown(format!("LZ4 encoder creation failed: {}", e)))?;
 
-                std::io::copy(&mut std::io::Cursor::new(data), &mut encoder)
-                    .map_err(|e| Error::Io(e))?;
+                std::io::copy(&mut std::io::Cursor::new(data), &mut encoder).map_err(Error::Io)?;
 
                 let (_output, result) = encoder.finish();
-                result.map_err(|e| Error::Io(e))?;
+                result.map_err(Error::Io)?;
 
                 Ok(compressed)
             }
@@ -57,18 +84,24 @@ impl Compressor {
         match self.algorithm {
             CompressionAlgorithm::None => Ok(data.to_vec()),
 
-            CompressionAlgorithm::Zstd(_) => {
-                zstd::bulk::decompress(data, 128 * 1024 * 1024) // Max 128MB decompressed
-                    .map_err(|e| Error::Unknown(format!("Zstd decompression failed: {}", e)))
-            }
+            CompressionAlgorithm::Zstd(_) => zstd::bulk::decompress(data, MAX_DECOMPRESSED_CHUNK)
+                .map_err(|e| Error::Unknown(format!("Zstd decompression failed: {}", e))),
 
             CompressionAlgorithm::Lz4 => {
                 let mut decompressed = Vec::new();
-                let mut decoder = lz4::Decoder::new(std::io::Cursor::new(data))
-                    .map_err(|e| Error::Io(e))?;
+                let decoder = lz4::Decoder::new(std::io::Cursor::new(data)).map_err(Error::Io)?;
 
-                std::io::copy(&mut decoder, &mut decompressed)
-                    .map_err(|e| Error::Io(e))?;
+                use std::io::Read;
+                decoder
+                    .take(MAX_DECOMPRESSED_CHUNK as u64 + 1)
+                    .read_to_end(&mut decompressed)
+                    .map_err(Error::Io)?;
+
+                if decompressed.len() > MAX_DECOMPRESSED_CHUNK {
+                    return Err(Error::Serialization(
+                        "Decompressed chunk too large".to_string(),
+                    ));
+                }
 
                 Ok(decompressed)
             }

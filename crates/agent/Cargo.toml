@@ -4,11 +4,21 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+description = "Backup, restore and verification for BackupForge"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+
+[features]
+default = []
+# Unfinished backup sources (SSH, Proxmox, Docker, databases, cloud VMs).
+experimental-sources = ["dep:ssh2"]
 
 [dependencies]
-backupforge-common = { path = "../common" }
-backupforge-core = { path = "../core" }
-backupforge-storage = { path = "../storage" }
+backupforge-common = { path = "../common", version = "0.1.0" }
+backupforge-core = { path = "../core", version = "0.1.0" }
+backupforge-storage = { path = "../storage", version = "0.1.0" }
 
 tokio = { workspace = true }
 async-trait = { workspace = true }
@@ -20,8 +30,8 @@ tracing = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 
-# SSH support
-ssh2 = { workspace = true }
+# SSH support (experimental sources only)
+ssh2 = { workspace = true, optional = true }
 
 # File watching
 walkdir = "2.5"

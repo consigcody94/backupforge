@@ -34,7 +34,11 @@ impl DockerBackup {
     /// List all running containers
     pub fn list_containers(&self) -> Result<Vec<ContainerInfo>> {
         let output = Command::new("docker")
-            .args(&["ps", "--format", "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}"])
+            .args(&[
+                "ps",
+                "--format",
+                "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}",
+            ])
             .output()
             .map_err(|e| Error::Unknown(format!("Failed to run docker: {}", e)))?;
 

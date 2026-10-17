@@ -1,19 +1,24 @@
 [package]
-name = "backupforge-cli"
+name = "backupforge"
+description = "Deduplicating, compressing, optionally encrypted backups"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
 
 [[bin]]
 name = "backupforge"
 path = "src/main.rs"
 
 [dependencies]
-backupforge-common = { path = "../common" }
-backupforge-core = { path = "../core" }
-backupforge-storage = { path = "../storage" }
-backupforge-agent = { path = "../agent" }
+backupforge-common = { path = "../common", version = "0.1.0" }
+backupforge-core = { path = "../core", version = "0.1.0" }
+backupforge-storage = { path = "../storage", version = "0.1.0" }
+backupforge-agent = { path = "../agent", version = "0.1.0" }
 
 tokio = { workspace = true }
 clap = { workspace = true }
@@ -24,3 +29,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+rpassword = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.10"

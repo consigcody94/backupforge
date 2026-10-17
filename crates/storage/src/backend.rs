@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use backupforge_common::{types::ChunkId, Error, Result};
+use backupforge_common::{types::ChunkId, Result};
 use serde::{Deserialize, Serialize};
 
 /// Storage backend configuration
@@ -46,6 +46,9 @@ pub trait StorageBackend: Send + Sync {
 
     /// Retrieve metadata
     async fn get_metadata(&self, key: &str) -> Result<Vec<u8>>;
+
+    /// List metadata keys starting with `prefix`
+    async fn list_metadata(&self, prefix: &str) -> Result<Vec<String>>;
 
     /// Get storage statistics
     async fn stats(&self) -> Result<StorageStats>;

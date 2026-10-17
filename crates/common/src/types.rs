@@ -63,6 +63,16 @@ pub struct FileMetadata {
     pub chunk_ids: Vec<ChunkId>,
 }
 
+/// Everything needed to restore one snapshot: its summary plus every file entry.
+///
+/// File paths are relative to the backed-up root and are validated again on
+/// restore, since a manifest read from storage is untrusted input.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotManifest {
+    pub snapshot: Snapshot,
+    pub files: Vec<FileMetadata>,
+}
+
 /// Backup job configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupJob {
@@ -81,19 +91,64 @@ pub struct BackupJob {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum BackupSource {
-    LocalPath { path: String, excludes: Vec<String> },
-    RemoteSSH { host: String, port: u16, user: String, path: String },
-    ProxmoxVM { node: String, vmid: String },
-    LXC { node: String, ctid: String },
-    DockerContainer { container_id: String },
-    DockerVolume { volume_name: String },
-    PostgreSQL { host: String, port: u16, database: String, username: String },
-    MySQL { host: String, port: u16, database: String, username: String },
-    MongoDB { host: String, port: u16, database: String },
-    Redis { host: String, port: u16 },
-    AWSEC2 { instance_id: String, region: String },
-    AzureVM { vm_name: String, resource_group: String },
-    GCPVM { instance_name: String, zone: String, project_id: String },
+    LocalPath {
+        path: String,
+        excludes: Vec<String>,
+    },
+    RemoteSSH {
+        host: String,
+        port: u16,
+        user: String,
+        path: String,
+    },
+    ProxmoxVM {
+        node: String,
+        vmid: String,
+    },
+    LXC {
+        node: String,
+        ctid: String,
+    },
+    DockerContainer {
+        container_id: String,
+    },
+    DockerVolume {
+        volume_name: String,
+    },
+    PostgreSQL {
+        host: String,
+        port: u16,
+        database: String,
+        username: String,
+    },
+    MySQL {
+        host: String,
+        port: u16,
+        database: String,
+        username: String,
+    },
+    MongoDB {
+        host: String,
+        port: u16,
+        database: String,
+    },
+    Redis {
+        host: String,
+        port: u16,
+    },
+    AWSEC2 {
+        instance_id: String,
+        region: String,
+    },
+    AzureVM {
+        vm_name: String,
+        resource_group: String,
+    },
+    GCPVM {
+        instance_name: String,
+        zone: String,
+        project_id: String,
+    },
 }
 
 /// Backup statistics

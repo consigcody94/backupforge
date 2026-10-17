@@ -4,9 +4,19 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+description = "Storage backends for BackupForge"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+
+[features]
+default = []
+# Unfinished S3/B2 backend on the unmaintained rusoto SDK; credentials are not wired up.
+s3 = ["dep:rusoto_core", "dep:rusoto_s3"]
 
 [dependencies]
-backupforge-common = { path = "../common" }
+backupforge-common = { path = "../common", version = "0.1.0" }
 
 tokio = { workspace = true }
 async-trait = { workspace = true }
@@ -16,10 +26,11 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 bytes = { workspace = true }
+uuid = { workspace = true }
 
 # S3 support
-rusoto_core = { workspace = true }
-rusoto_s3 = { workspace = true }
+rusoto_core = { workspace = true, optional = true }
+rusoto_s3 = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

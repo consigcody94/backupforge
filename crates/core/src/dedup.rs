@@ -1,4 +1,4 @@
-use backupforge_common::{types::ChunkId, Result, Error};
+use backupforge_common::types::ChunkId;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 

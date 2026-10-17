@@ -57,7 +57,10 @@ impl DatabaseBackup {
                 database,
                 username,
                 password,
-            } => self.backup_postgresql(host, *port, database, username, password).await,
+            } => {
+                self.backup_postgresql(host, *port, database, username, password)
+                    .await
+            }
 
             DatabaseType::MySQL {
                 host,
@@ -65,7 +68,10 @@ impl DatabaseBackup {
                 database,
                 username,
                 password,
-            } => self.backup_mysql(host, *port, database, username, password).await,
+            } => {
+                self.backup_mysql(host, *port, database, username, password)
+                    .await
+            }
 
             DatabaseType::MongoDB {
                 host,
@@ -73,7 +79,16 @@ impl DatabaseBackup {
                 database,
                 username,
                 password,
-            } => self.backup_mongodb(host, *port, database, username.as_deref(), password.as_deref()).await,
+            } => {
+                self.backup_mongodb(
+                    host,
+                    *port,
+                    database,
+                    username.as_deref(),
+                    password.as_deref(),
+                )
+                .await
+            }
 
             DatabaseType::Redis {
                 host,
@@ -94,17 +109,26 @@ impl DatabaseBackup {
     ) -> Result<Snapshot> {
         tracing::info!("Backing up PostgreSQL database: {}@{}", database, host);
 
-        let dump_path = format!("/tmp/postgres_{}_{}.sql", database, chrono::Utc::now().timestamp());
+        let dump_path = format!(
+            "/tmp/postgres_{}_{}.sql",
+            database,
+            chrono::Utc::now().timestamp()
+        );
 
         // Use pg_dump to create backup
         let status = Command::new("pg_dump")
             .env("PGPASSWORD", password)
             .args(&[
-                "-h", host,
-                "-p", &port.to_string(),
-                "-U", username,
-                "-d", database,
-                "-f", &dump_path,
+                "-h",
+                host,
+                "-p",
+                &port.to_string(),
+                "-U",
+                username,
+                "-d",
+                database,
+                "-f",
+                &dump_path,
                 "--clean",
                 "--if-exists",
                 "--create",
@@ -148,14 +172,21 @@ impl DatabaseBackup {
     ) -> Result<Snapshot> {
         tracing::info!("Backing up MySQL database: {}@{}", database, host);
 
-        let dump_path = format!("/tmp/mysql_{}_{}.sql", database, chrono::Utc::now().timestamp());
+        let dump_path = format!(
+            "/tmp/mysql_{}_{}.sql",
+            database,
+            chrono::Utc::now().timestamp()
+        );
 
         // Use mysqldump to create backup
         let status = Command::new("mysqldump")
             .args(&[
-                "-h", host,
-                "-P", &port.to_string(),
-                "-u", username,
+                "-h",
+                host,
+                "-P",
+                &port.to_string(),
+                "-u",
+                username,
                 &format!("-p{}", password),
                 "--single-transaction",
                 "--routines",
@@ -206,10 +237,14 @@ impl DatabaseBackup {
         let dump_path = format!("/tmp/mongo_{}_{}", database, chrono::Utc::now().timestamp());
 
         let mut args = vec![
-            "--host", host,
-            "--port", &port.to_string(),
-            "--db", database,
-            "--out", &dump_path,
+            "--host",
+            host,
+            "--port",
+            &port.to_string(),
+            "--db",
+            database,
+            "--out",
+            &dump_path,
         ];
 
         let mut username_str = String::new();
@@ -290,11 +325,15 @@ impl DatabaseBackup {
         let output = Command::new("psql")
             .env("PGPASSWORD", password)
             .args(&[
-                "-h", host,
-                "-p", &port.to_string(),
-                "-U", username,
+                "-h",
+                host,
+                "-p",
+                &port.to_string(),
+                "-U",
+                username,
                 "-t",
-                "-c", "SELECT datname FROM pg_database WHERE datistemplate = false;",
+                "-c",
+                "SELECT datname FROM pg_database WHERE datistemplate = false;",
             ])
             .output()
             .map_err(|e| Error::Unknown(format!("Failed to list databases: {}", e)))?;
@@ -322,11 +361,15 @@ impl DatabaseBackup {
     ) -> Result<Vec<String>> {
         let output = Command::new("mysql")
             .args(&[
-                "-h", host,
-                "-P", &port.to_string(),
-                "-u", username,
+                "-h",
+                host,
+                "-P",
+                &port.to_string(),
+                "-u",
+                username,
                 &format!("-p{}", password),
-                "-e", "SHOW DATABASES;",
+                "-e",
+                "SHOW DATABASES;",
                 "--skip-column-names",
             ])
             .output()

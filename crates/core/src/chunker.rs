@@ -1,5 +1,8 @@
-use backupforge_common::{hash::hash_data, types::{Chunk, ChunkId}, Result, Error};
-use bytes::Bytes;
+use backupforge_common::{
+    hash::hash_data,
+    types::{Chunk, ChunkId},
+    Result,
+};
 
 /// Chunking strategy for breaking data into chunks
 #[derive(Debug, Clone)]
@@ -106,9 +109,14 @@ impl Chunker {
             let search_end = std::cmp::min(offset + max_size, data_len);
 
             let mut hash: u64 = 0;
-            for i in (offset + min_size)..search_end {
+            for (i, &byte) in data
+                .iter()
+                .enumerate()
+                .take(search_end)
+                .skip(offset + min_size)
+            {
                 // Simple rolling hash (Rabin fingerprint simplified)
-                hash = hash.wrapping_mul(31).wrapping_add(data[i] as u64);
+                hash = hash.wrapping_mul(31).wrapping_add(byte as u64);
 
                 // Check for chunk boundary
                 if (hash & mask) == 0 {
@@ -163,7 +171,7 @@ mod tests {
 
         assert!(!chunks.is_empty());
         // CDC should create at least one chunk
-        assert!(chunks.len() >= 1);
+        assert!(!chunks.is_empty());
     }
 
     #[test]
@@ -177,6 +185,36 @@ mod tests {
         assert_eq!(chunks1.len(), chunks2.len());
         for (c1, c2) in chunks1.iter().zip(chunks2.iter()) {
             assert_eq!(c1.id, c2.id);
+        }
+    }
+
+    #[test]
+    fn chunks_always_reassemble_to_the_input() {
+        let mut x: u64 = 0x1234_5678_9abc_def0;
+        for len in [
+            0usize, 1, 15, 16, 17, 63, 64, 65, 255, 256, 257, 5_000, 70_000,
+        ] {
+            let data: Vec<u8> = (0..len)
+                .map(|_| {
+                    x ^= x << 13;
+                    x ^= x >> 7;
+                    x ^= x << 17;
+                    (x >> 24) as u8
+                })
+                .collect();
+            for strategy in [
+                ChunkingStrategy::Fixed { size: 64 },
+                ChunkingStrategy::ContentDefined {
+                    min_size: 16,
+                    avg_size: 64,
+                    max_size: 256,
+                },
+                ChunkingStrategy::default(),
+            ] {
+                let chunks = Chunker::new(strategy).chunk_data(&data).unwrap();
+                let joined: Vec<u8> = chunks.iter().flat_map(|c| c.data.clone()).collect();
+                assert_eq!(joined, data, "len {len}");
+            }
         }
     }
 }

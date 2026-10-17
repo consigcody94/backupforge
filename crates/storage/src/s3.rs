@@ -81,18 +81,15 @@ impl StorageBackend for S3Storage {
             ..Default::default()
         };
 
-        let result = self
-            .client
-            .get_object(request)
-            .await
-            .map_err(|e| match e {
-                RusotoError::Service(_) => Error::ChunkNotFound(chunk_id.0.clone()),
-                _ => Error::Storage(format!("S3 get failed: {}", e)),
-            })?;
+        let result = self.client.get_object(request).await.map_err(|e| match e {
+            RusotoError::Service(_) => Error::ChunkNotFound(chunk_id.0.clone()),
+            _ => Error::Storage(format!("S3 get failed: {}", e)),
+        })?;
 
         let mut data = Vec::new();
-        if let Some(mut body) = result.body {
-            body.read_to_end(&mut data)
+        if let Some(body) = result.body {
+            body.into_async_read()
+                .read_to_end(&mut data)
                 .await
                 .map_err(|e| Error::Storage(format!("Failed to read S3 body: {}", e)))?;
         }
@@ -206,13 +203,52 @@ impl StorageBackend for S3Storage {
             .map_err(|e| Error::Storage(format!("S3 get metadata failed: {}", e)))?;
 
         let mut data = Vec::new();
-        if let Some(mut body) = result.body {
-            body.read_to_end(&mut data)
+        if let Some(body) = result.body {
+            body.into_async_read()
+                .read_to_end(&mut data)
                 .await
                 .map_err(|e| Error::Storage(format!("Failed to read S3 metadata: {}", e)))?;
         }
 
         Ok(data)
+    }
+
+    async fn list_metadata(&self, prefix: &str) -> Result<Vec<String>> {
+        let base = format!("{}/metadata/", self.prefix);
+        let full_prefix = format!("{}{}", base, prefix);
+        let mut keys = Vec::new();
+        let mut continuation_token = None;
+
+        loop {
+            let request = ListObjectsV2Request {
+                bucket: self.bucket.clone(),
+                prefix: Some(full_prefix.clone()),
+                continuation_token,
+                ..Default::default()
+            };
+
+            let result = self
+                .client
+                .list_objects_v2(request)
+                .await
+                .map_err(|e| Error::Storage(format!("S3 list metadata failed: {}", e)))?;
+
+            for object in result.contents.unwrap_or_default() {
+                if let Some(key) = object.key {
+                    if let Some(name) = key.strip_prefix(&base) {
+                        keys.push(name.to_string());
+                    }
+                }
+            }
+
+            if result.is_truncated == Some(true) {
+                continuation_token = result.next_continuation_token;
+            } else {
+                break;
+            }
+        }
+
+        Ok(keys)
     }
 
     async fn stats(&self) -> Result<StorageStats> {

@@ -1,9 +1,10 @@
-use async_trait::async_trait;
 use backupforge_common::{types::ChunkId, Result};
 use std::sync::Arc;
 
 use crate::backend::{StorageBackend, StorageConfig, StorageStats};
-use crate::{LocalStorage, S3Storage};
+use crate::LocalStorage;
+#[cfg(feature = "s3")]
+use crate::S3Storage;
 
 /// Storage manager that handles different backend types
 pub struct StorageManager {
@@ -13,31 +14,34 @@ pub struct StorageManager {
 impl StorageManager {
     pub async fn from_config(config: StorageConfig) -> Result<Self> {
         let backend: Arc<dyn StorageBackend> = match config {
-            StorageConfig::Local { path } => {
-                Arc::new(LocalStorage::new(path).await?)
-            }
+            StorageConfig::Local { path } => Arc::new(LocalStorage::new(path).await?),
 
+            #[cfg(feature = "s3")]
             StorageConfig::S3 {
                 bucket,
                 region,
                 endpoint,
                 ..
-            } => {
-                Arc::new(S3Storage::new(bucket, region, endpoint, None)?)
-            }
+            } => Arc::new(S3Storage::new(bucket, region, endpoint, None)?),
 
-            StorageConfig::B2 {
-                bucket,
-                key_id,
-                application_key,
-            } => {
+            #[cfg(feature = "s3")]
+            StorageConfig::B2 { bucket, .. } => {
                 // B2 is S3-compatible
                 Arc::new(S3Storage::new(
                     bucket,
                     "us-west-000".to_string(),
-                    Some(format!("https://s3.us-west-000.backblazeb2.com")),
+                    Some("https://s3.us-west-000.backblazeb2.com".to_string()),
                     None,
                 )?)
+            }
+
+            #[cfg(not(feature = "s3"))]
+            StorageConfig::S3 { .. } | StorageConfig::B2 { .. } => {
+                return Err(backupforge_common::Error::InvalidConfig(
+                    "S3 and B2 storage are unfinished and not built by default \
+                     (the `s3` feature does not use the configured credentials yet)"
+                        .to_string(),
+                ))
             }
         };
 
@@ -70,6 +74,10 @@ impl StorageManager {
 
     pub async fn get_metadata(&self, key: &str) -> Result<Vec<u8>> {
         self.backend.get_metadata(key).await
+    }
+
+    pub async fn list_metadata(&self, prefix: &str) -> Result<Vec<String>> {
+        self.backend.list_metadata(prefix).await
     }
 
     pub async fn stats(&self) -> Result<StorageStats> {
