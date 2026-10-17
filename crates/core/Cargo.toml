@@ -35,7 +35,7 @@ hex = { workspace = true }
 # Compression
 zstd = { workspace = true }
 lz4 = { workspace = true }
-fastcdc = "3"
+fastcdc = "5"
 
 [dev-dependencies]
 proptest = "1.12.0"
