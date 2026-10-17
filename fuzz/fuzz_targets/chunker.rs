@@ -7,7 +7,7 @@ use libfuzzer_sys::fuzz_target;
 fuzz_target!(|data: &[u8]| {
     for strategy in [
         ChunkingStrategy::Fixed { size: 64 },
-        ChunkingStrategy::ContentDefined { min_size: 16, avg_size: 64, max_size: 256 },
+        ChunkingStrategy::ContentDefined { min_size: 64, avg_size: 256, max_size: 1024 },
     ] {
         let chunks = Chunker::new(strategy).chunk_data(data).unwrap();
         let joined: Vec<u8> = chunks.iter().flat_map(|c| c.data.clone()).collect();

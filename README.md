@@ -24,6 +24,10 @@ backupforge backup -s ~/Documents -d /mnt/backup/docs --encrypt
 backupforge list    -d /mnt/backup/docs
 backupforge verify  -d /mnt/backup/docs            # re-reads and checks every chunk
 backupforge restore -d /mnt/backup/docs -t ~/restored
+
+# Keep the 7 newest snapshots and delete the rest (preview first)
+backupforge forget -d /mnt/backup/docs -k 7 --dry-run
+backupforge forget -d /mnt/backup/docs -k 7
 ```
 
 - The password comes from an interactive prompt (no echo). For scripts you can set
@@ -33,6 +37,8 @@ backupforge restore -d /mnt/backup/docs -t ~/restored
 - `backup` exits with status 2 and prints a warning if some files could not be read;
   the snapshot is tagged `partial:N`.
 - Exclude paths with `-x node_modules` (repeatable, substring match).
+- If a backup or forget was killed, the repository stays locked. Run `backupforge unlock`
+  only when you are sure nothing else is running against that repository.
 
 ## What works
 
@@ -42,14 +48,18 @@ backupforge restore -d /mnt/backup/docs -t ~/restored
 | Content-defined chunking, zstd compression, deduplication across runs | works |
 | Password encryption (AES-256-GCM, Argon2id), file names included | works, tested |
 | Restore, `verify`, `list`, `stats` | works, tested |
+| Symbolic links, modification times, permissions | backed up and restored, tested |
+| `forget --keep-last N` (retention) | works, tested; manifests verified before any deletion |
+| Repository lock for backup and forget | works, tested; stale locks cleared with `unlock` |
 | Corruption, truncation, deletion and chunk-swap detection | works, tested |
-| Safe restore from a hostile repository (no path escape, no symlink writes) | works, tested |
+| Safe restore from a hostile repository (no path escape, including via links created during restore) | works, tested |
 | S3 / Backblaze backends | **not usable**: credentials are not wired up |
-| HTTP server and web dashboard | **prototype**: authentication is not implemented, login returns 501 |
-| MCP server | **prototype**, unreviewed |
+| HTTP server and web dashboard | **unfinished**: refuses to start unless `BACKUPFORGE_SERVER_ENABLE=1`; login returns 501 |
+| MCP server | **unfinished**: refuses to start unless `BACKUPFORGE_MCP_ENABLE=1`; most tools do not work |
 | SSH, Proxmox, Docker, database, cloud-VM sources | **unfinished**, off by default (`experimental-sources` feature) |
-| Scheduling, retention, pruning, incremental parent snapshots | not implemented |
-| Symlinks, ownership, extended attributes, timestamps on restore | not preserved |
+| Scheduling, incremental parent snapshots | not implemented |
+| Ownership, extended attributes, ACLs on restore | not preserved |
+| Special files (sockets, FIFOs, devices) | skipped and recorded as `partial` |
 
 ## Security model
 
@@ -66,6 +76,8 @@ and the byte-level layout is in [docs/FORMAT.md](docs/FORMAT.md).
 - Snapshot manifests (file names, sizes, layout) are sealed the same way.
 - Every restored chunk is decrypted, decompressed and re-hashed against its ID.
 - The derived key is zeroized when dropped.
+- Restore writes only through a directory handle rooted at the target. Links that
+  would point outside the target are skipped.
 
 **What it protects against:** someone who can read or modify the repository but does
 not have the password (stolen disk, cloud provider, malware on the storage box).
@@ -73,13 +85,16 @@ not have the password (stolen disk, cloud provider, malware on the storage box).
 **What it does not protect against**
 
 - Deletion or rollback of the whole repository to an older valid state.
+- Another process changing files inside the restore target while a restore runs.
+- Forgetting a snapshot while it is being restored (the restore can fail partway).
 - Leaks of chunk count and sizes, snapshot count and times, and total size.
 - A compromised machine running the backup.
 - Very large repositories: random 96-bit nonces limit one key to roughly 4 PiB.
 - A weak password. Argon2id slows guessing; it cannot stop it.
 
 This project has not had an independent security audit. Do not rely on it as your
-only copy of data you cannot lose.
+only copy of data you cannot lose. Read [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
+before deciding.
 
 Report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
 
@@ -87,8 +102,11 @@ Report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
 
 ```bash
 cargo build --release -p backupforge
-cargo test --workspace          # unit and end-to-end tests
+cargo test --workspace          # unit, end-to-end, CLI and property tests
 cargo clippy --workspace --all-targets -- -D warnings
+
+# Fuzzing (nightly required; each target runs until stopped)
+cd fuzz && cargo +nightly fuzz run open_chunk
 ```
 
 Layout:
@@ -99,8 +117,9 @@ crates/core      chunking, compression, encryption, repository header, engine
 crates/storage   storage backends (local directory; S3 unfinished)
 crates/agent     backup, restore, verify
 crates/cli       the `backupforge` binary
-crates/server    HTTP API prototype
-crates/mcp-server  MCP server prototype
+crates/server    HTTP API (unfinished, opt-in)
+crates/mcp-server  MCP server (unfinished, opt-in)
+fuzz/            fuzz targets for the parsing paths
 ```
 
 ## Contributing

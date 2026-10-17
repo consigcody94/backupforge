@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use backupforge_common::{types::ChunkId, Result};
+use backupforge_common::{types::ChunkId, Error, Result};
 use serde::{Deserialize, Serialize};
 
 /// Storage backend configuration
@@ -49,6 +49,23 @@ pub trait StorageBackend: Send + Sync {
 
     /// List metadata keys starting with `prefix`
     async fn list_metadata(&self, prefix: &str) -> Result<Vec<String>>;
+
+    /// Create a metadata object only if the key is free. Returns `false` if it
+    /// already exists. Used for the repository lock.
+    async fn create_metadata_exclusive(&self, key: &str, data: Vec<u8>) -> Result<bool> {
+        let _ = (key, data);
+        Err(Error::InvalidConfig(
+            "this storage backend does not support repository locking".to_string(),
+        ))
+    }
+
+    /// Delete a metadata object. Deleting a missing key is not an error.
+    async fn delete_metadata(&self, key: &str) -> Result<()> {
+        let _ = key;
+        Err(Error::InvalidConfig(
+            "this storage backend does not support deleting metadata".to_string(),
+        ))
+    }
 
     /// Get storage statistics
     async fn stats(&self) -> Result<StorageStats>;

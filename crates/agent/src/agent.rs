@@ -4,11 +4,16 @@ use backupforge_common::{
 };
 use backupforge_core::{BackupConfig, BackupEngine, RepoConfig, REPO_CONFIG_KEY};
 use backupforge_storage::{StorageConfig, StorageManager};
+use chrono::Utc;
+use std::future::Future;
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::filesystem::{RestoreSummary, VerifyReport};
+use crate::filesystem::{ForgetReport, RestoreSummary, VerifyReport};
 use crate::FilesystemBackup;
+
+/// Metadata key of the repository lock. Held by writers (backup, forget).
+const LOCK_KEY: &str = "lock";
 
 /// Main backup agent that coordinates backup, restore and verification.
 pub struct BackupAgent {
@@ -91,9 +96,11 @@ impl BackupAgent {
 
         match &job.source {
             BackupSource::LocalPath { path, excludes } => {
-                self.fs_backup
-                    .backup_directory(Path::new(path), excludes)
-                    .await
+                self.with_lock(
+                    "backup",
+                    self.fs_backup.backup_directory(Path::new(path), excludes),
+                )
+                .await
             }
             other => Err(Error::InvalidConfig(format!(
                 "Backup source not supported yet: {}",
@@ -119,6 +126,56 @@ impl BackupAgent {
 
     pub async fn verify_snapshot(&self, snapshot_id: Option<&str>) -> Result<VerifyReport> {
         self.fs_backup.verify_snapshot(snapshot_id).await
+    }
+
+    /// Keep the newest `keep_last` snapshots and delete the rest with their
+    /// unreferenced chunks. Takes the repository lock.
+    pub async fn forget(&self, keep_last: usize, dry_run: bool) -> Result<ForgetReport> {
+        self.with_lock("forget", self.fs_backup.forget(keep_last, dry_run))
+            .await
+    }
+
+    /// Remove a stale lock left by a crashed or killed operation. Only run this
+    /// when no backup or forget is running.
+    pub async fn unlock(&self) -> Result<()> {
+        self.storage.delete_metadata(LOCK_KEY).await
+    }
+
+    /// Run `op` while holding the repository lock. The lock is released whether
+    /// or not `op` succeeds.
+    async fn with_lock<T>(&self, purpose: &str, op: impl Future<Output = Result<T>>) -> Result<T> {
+        let info = serde_json::json!({
+            "pid": std::process::id(),
+            "purpose": purpose,
+            "started": Utc::now(),
+        })
+        .to_string();
+
+        if !self
+            .storage
+            .create_metadata_exclusive(LOCK_KEY, info.into_bytes())
+            .await?
+        {
+            let holder = self
+                .storage
+                .get_metadata(LOCK_KEY)
+                .await
+                .ok()
+                .map(|b| String::from_utf8_lossy(&b).to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            return Err(Error::Storage(format!(
+                "repository is locked by another operation ({holder}). \
+                 If none is running, run `backupforge unlock`."
+            )));
+        }
+
+        let result = op.await;
+        let released = self.storage.delete_metadata(LOCK_KEY).await;
+        match (result, released) {
+            (Ok(value), Ok(())) => Ok(value),
+            (Err(e), _) => Err(e),
+            (Ok(_), Err(e)) => Err(e),
+        }
     }
 
     /// Storage totals for the repository.

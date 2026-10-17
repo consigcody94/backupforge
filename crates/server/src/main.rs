@@ -3,6 +3,16 @@ use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Prototype: login and registration are not implemented and the API has no
+    // working authentication. Refuse to start unless explicitly enabled.
+    if std::env::var("BACKUPFORGE_SERVER_ENABLE").as_deref() != Ok("1") {
+        eprintln!(
+            "backupforge-server is an unfinished prototype (no working authentication). \
+             Set BACKUPFORGE_SERVER_ENABLE=1 to run it anyway."
+        );
+        std::process::exit(2);
+    }
+
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)

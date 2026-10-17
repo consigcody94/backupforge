@@ -61,6 +61,9 @@ pub struct FileMetadata {
     pub permissions: u32,
     pub is_directory: bool,
     pub chunk_ids: Vec<ChunkId>,
+    /// Link target text for symbolic links; `None` for files and directories.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symlink_target: Option<String>,
 }
 
 /// Everything needed to restore one snapshot: its summary plus every file entry.

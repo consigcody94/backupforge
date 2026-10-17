@@ -7,11 +7,13 @@ repo/
   metadata/
     repo.json                 public header
     snapshot-<uuid>           one sealed manifest per snapshot
+    lock                      present only while a backup or forget runs
   chunks/<first 2 chars>/<chunk id>
 ```
 
 All names read from storage are validated (`[A-Za-z0-9._-]`, no leading dot) and
-all files are written to a temporary name, fsynced, then renamed.
+files are written to a temporary name, fsynced, then renamed. The lock is created
+exclusively (create-new) and is the one object written without rename.
 
 ## repo.json
 
@@ -24,8 +26,8 @@ all files are written to a temporary name, fsynced, then renamed.
 }
 ```
 
-A reader refuses a `format_version` newer than it supports. KDF parameters are
-stored so they can be raised for new repositories without breaking old ones.
+A reader refuses a `format_version` newer than it supports. KDF parameters are stored so
+they can be raised for new repositories without breaking old ones.
 
 ## Keys
 
@@ -39,6 +41,12 @@ Subkeys use BLAKE3 `derive_key` with context `"backupforge 2026 v1 <purpose>"`:
 - unencrypted: `hex(BLAKE3(plaintext chunk))`
 - encrypted: `hex(BLAKE3-keyed(chunk-id subkey, plaintext chunk))`
 
+## Chunking
+
+Content-defined with FastCDC (v2020 gear hash, normalization level 1). Default sizes:
+min 256 KiB, average 1 MiB, max 4 MiB. Chunk boundaries are not stored; restore uses
+chunk IDs, so changing the chunker does not affect reading existing chunks.
+
 ## Sealed objects
 
 First byte is the format tag.
@@ -50,20 +58,30 @@ First byte is the format tag.
 - encrypted blob: `0x02 || nonce(12) || AES-256-GCM(plaintext)`,
   AAD = `"bf1/blob/snapshot/" + snapshot id`
 
-Compression tags: `0` none, `1` zstd, `2` lz4. Decompressed chunks are capped at
-128 MiB.
+Compression tags: `0` none, `1` zstd, `2` lz4. Decompressed chunks are capped at 128 MiB.
 
-On read, the chunk is decrypted, decompressed, re-hashed and compared with its ID.
-A repository that is encrypted rejects `0x01` objects.
+On read, the chunk is decrypted, decompressed, re-hashed and compared with its ID. An
+encrypted repository rejects `0x01` objects.
 
 ## Manifest
 
-JSON `SnapshotManifest { snapshot, files[] }`. File `path` is relative to the
-backed-up root with `/` separators. Directories appear as entries with
-`is_directory: true`. A manifest's snapshot ID must equal the ID in its file name.
+JSON `SnapshotManifest { snapshot, files[] }`. Each file entry has `path` (relative to
+the backed-up root, `/` separators), `size`, `modified`, `permissions`, `is_directory`,
+`chunk_ids`, and an optional `symlink_target`. An entry with `symlink_target` is a
+symbolic link; the target text is stored as written, and is only restored if it is
+relative and stays inside the restore directory. Older manifests without the field read
+as before.
+
+A manifest's snapshot ID must equal the ID in its file name.
+
+## Retention
+
+`forget --keep-last N` keeps the N newest manifests by creation time, deletes the rest,
+then deletes every chunk not referenced by a kept manifest. Manifests are deleted first.
+A crash in between leaves unreferenced chunks, which the next run removes. Every
+manifest must verify before any deletion.
 
 ## Compatibility rule
 
-Any change that alters how an existing repository is read bumps `format_version`
-and ships with a test that still reads a repository written by the previous
-version.
+Any change that alters how an existing repository is read bumps `format_version` and
+ships with a test that still reads a repository written by the previous version.

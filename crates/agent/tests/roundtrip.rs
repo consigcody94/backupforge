@@ -388,6 +388,7 @@ fn entry(path: &str, is_directory: bool) -> FileMetadata {
         permissions: 0o644,
         is_directory,
         chunk_ids: vec![],
+        symlink_target: None,
     }
 }
 
@@ -544,4 +545,245 @@ async fn unsupported_sources_error_instead_of_pretending() {
         port: 6379,
     };
     assert!(agent.run_job(&j).await.is_err());
+}
+
+// ---- restore containment, links, metadata, retention, locking ----
+
+fn new_entry_link(path: &str, target: &str) -> FileMetadata {
+    FileMetadata {
+        path: path.to_string(),
+        size: 0,
+        modified: chrono::Utc::now(),
+        permissions: 0o777,
+        is_directory: false,
+        chunk_ids: vec![],
+        symlink_target: Some(target.to_string()),
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn relative_links_inside_the_tree_are_restored_as_links() {
+    let tmp = TempDir::new().unwrap();
+    let (src, repo, out) = (
+        tmp.path().join("src"),
+        tmp.path().join("repo"),
+        tmp.path().join("out"),
+    );
+    fs::create_dir_all(src.join("sub")).unwrap();
+    fs::write(src.join("real.txt"), b"content").unwrap();
+    std::os::unix::fs::symlink("../real.txt", src.join("sub/alias.txt")).unwrap();
+
+    backup(&src, &repo, None, false).await;
+    let summary = open(&repo, None)
+        .await
+        .unwrap()
+        .restore_snapshot(None, &out)
+        .await
+        .unwrap();
+
+    assert_eq!(summary.symlinks, 1);
+    assert_eq!(summary.skipped_links, 0);
+    assert_eq!(
+        fs::read_link(out.join("sub/alias.txt")).unwrap(),
+        PathBuf::from("../real.txt")
+    );
+    assert_eq!(
+        fs::read_to_string(out.join("sub/alias.txt")).unwrap(),
+        "content"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn links_that_escape_the_restore_directory_are_skipped() {
+    let tmp = TempDir::new().unwrap();
+    let repo = tmp.path().join("repo");
+    let out = tmp.path().join("out");
+    let agent = open_new(&repo).await;
+    let id = plant_manifest(
+        &agent,
+        vec![
+            new_entry_link("a/up.txt", "../../../outside"),
+            new_entry_link("abs.txt", "/etc/passwd"),
+        ],
+    )
+    .await;
+
+    let summary = agent.restore_snapshot(Some(&id), &out).await.unwrap();
+    assert_eq!(summary.skipped_links, 2);
+    assert!(fs::symlink_metadata(out.join("a/up.txt")).is_err());
+    assert!(fs::symlink_metadata(out.join("abs.txt")).is_err());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn preexisting_link_cannot_redirect_a_restored_file() {
+    let tmp = TempDir::new().unwrap();
+    let (src, repo, out) = (
+        tmp.path().join("src"),
+        tmp.path().join("repo"),
+        tmp.path().join("out"),
+    );
+    let outside = tmp.path().join("outside.txt");
+    fs::write(&outside, b"original outside").unwrap();
+    fs::create_dir_all(&src).unwrap();
+    fs::write(src.join("note.txt"), b"from backup").unwrap();
+    backup(&src, &repo, None, false).await;
+
+    // The restore target already contains a link to a file outside it.
+    fs::create_dir_all(&out).unwrap();
+    std::os::unix::fs::symlink(&outside, out.join("note.txt")).unwrap();
+
+    open(&repo, None)
+        .await
+        .unwrap()
+        .restore_snapshot(None, &out)
+        .await
+        .unwrap();
+
+    assert_eq!(fs::read(&outside).unwrap(), b"original outside");
+    assert_eq!(
+        fs::read_to_string(out.join("note.txt")).unwrap(),
+        "from backup"
+    );
+    assert!(!fs::symlink_metadata(out.join("note.txt"))
+        .unwrap()
+        .file_type()
+        .is_symlink());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn modification_times_and_modes_round_trip() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = TempDir::new().unwrap();
+    let (src, repo, out) = (
+        tmp.path().join("src"),
+        tmp.path().join("repo"),
+        tmp.path().join("out"),
+    );
+    fs::create_dir_all(src.join("d")).unwrap();
+    let file = src.join("d/f.txt");
+    fs::write(&file, b"timed").unwrap();
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o640)).unwrap();
+    let when = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_500_000_000);
+    fs::File::options()
+        .write(true)
+        .open(&file)
+        .unwrap()
+        .set_modified(when)
+        .unwrap();
+
+    backup(&src, &repo, None, false).await;
+    open(&repo, None)
+        .await
+        .unwrap()
+        .restore_snapshot(None, &out)
+        .await
+        .unwrap();
+
+    let restored = out.join("d/f.txt");
+    let meta = fs::metadata(&restored).unwrap();
+    assert_eq!(meta.permissions().mode() & 0o777, 0o640);
+    let secs = meta
+        .modified()
+        .unwrap()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    assert_eq!(secs, 1_500_000_000);
+}
+
+#[tokio::test]
+async fn forget_keeps_newest_and_reclaims_unreferenced_chunks() {
+    let tmp = TempDir::new().unwrap();
+    let (src, repo, out) = (
+        tmp.path().join("src"),
+        tmp.path().join("repo"),
+        tmp.path().join("out"),
+    );
+    fs::create_dir_all(&src).unwrap();
+    fs::write(src.join("a.bin"), noise(600_000, 11)).unwrap();
+    let old = backup(&src, &repo, None, false).await;
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+
+    // Replace the content so the old snapshot's chunks become unreferenced.
+    fs::write(src.join("a.bin"), noise(600_000, 22)).unwrap();
+    let newest = backup(&src, &repo, None, false).await;
+
+    let agent = open(&repo, None).await.unwrap();
+    let before = chunk_files(&repo).len();
+
+    let dry = agent.forget(1, true).await.unwrap();
+    assert!(dry.dry_run && dry.chunks_unreferenced > 0);
+    assert_eq!(chunk_files(&repo).len(), before, "dry run must not delete");
+
+    let report = agent.forget(1, false).await.unwrap();
+    assert_eq!(report.removed.len(), 1);
+    assert!(chunk_files(&repo).len() < before);
+
+    let snapshots = agent.list_snapshots().await.unwrap();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].id.0, newest.id.0);
+    assert_ne!(snapshots[0].id.0, old.id.0);
+    assert!(agent.verify_snapshot(None).await.unwrap().is_ok());
+    agent.restore_snapshot(None, &out).await.unwrap();
+    assert_eq!(fs::read(out.join("a.bin")).unwrap(), noise(600_000, 22));
+}
+
+#[tokio::test]
+async fn forget_refuses_zero_and_aborts_on_an_unverifiable_manifest() {
+    let tmp = TempDir::new().unwrap();
+    let (src, repo) = (tmp.path().join("src"), tmp.path().join("repo"));
+    make_source(&src);
+    backup(&src, &repo, None, false).await;
+    backup(&src, &repo, None, false).await;
+
+    let agent = open(&repo, None).await.unwrap();
+    assert!(agent.forget(0, false).await.is_err());
+
+    let manifest = all_files(&repo.join("metadata"))
+        .into_iter()
+        .find(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("snapshot-")
+        })
+        .unwrap();
+    let mut bytes = fs::read(&manifest).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 1;
+    fs::write(&manifest, bytes).unwrap();
+
+    let chunks_before = chunk_files(&repo).len();
+    assert!(agent.forget(1, false).await.is_err());
+    assert_eq!(
+        chunk_files(&repo).len(),
+        chunks_before,
+        "nothing may be deleted"
+    );
+}
+
+#[tokio::test]
+async fn backups_refuse_to_run_while_the_repository_is_locked() {
+    let tmp = TempDir::new().unwrap();
+    let (src, repo) = (tmp.path().join("src"), tmp.path().join("repo"));
+    make_source(&src);
+    let agent = open_new(&repo).await;
+
+    agent
+        .storage()
+        .create_metadata_exclusive("lock", b"{\"pid\":1}".to_vec())
+        .await
+        .unwrap();
+    let blocked = agent.run_job(&job(&src)).await;
+    assert!(blocked.is_err());
+    assert!(blocked.unwrap_err().to_string().contains("locked"));
+
+    agent.unlock().await.unwrap();
+    agent.run_job(&job(&src)).await.unwrap();
+    // The lock is released after a successful run, so a second run works too.
+    agent.run_job(&job(&src)).await.unwrap();
 }

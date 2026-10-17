@@ -88,6 +88,29 @@ enum Commands {
         snapshot: Option<String>,
     },
 
+    /// Delete old snapshots and the chunks only they used
+    Forget {
+        /// Repository path
+        #[arg(short = 'd', long)]
+        storage: PathBuf,
+
+        /// Number of newest snapshots to keep (at least 1)
+        #[arg(short, long)]
+        keep_last: usize,
+
+        /// Show what would be deleted without deleting anything
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Remove a stale repository lock left by a killed backup or forget.
+    /// Only run this when no backup or forget is running.
+    Unlock {
+        /// Repository path
+        #[arg(short = 'd', long)]
+        storage: PathBuf,
+    },
+
     /// Show repository statistics
     Stats {
         /// Repository path
@@ -255,12 +278,19 @@ async fn main() -> anyhow::Result<()> {
             let agent = open(&storage, BackupConfig::default(), false, false).await?;
             let summary = agent.restore_snapshot(snapshot.as_deref(), &target).await?;
             println!(
-                "Restored {} files, {} directories, {} bytes to {}",
+                "Restored {} files, {} directories, {} links, {} bytes to {}",
                 summary.files,
                 summary.directories,
+                summary.symlinks,
                 summary.bytes,
                 target.display()
             );
+            if summary.skipped_links > 0 {
+                eprintln!(
+                    "WARNING: {} link(s) pointed outside the restore directory and were not restored.",
+                    summary.skipped_links
+                );
+            }
         }
 
         Commands::List { storage } => {
@@ -299,6 +329,30 @@ async fn main() -> anyhow::Result<()> {
                 );
             }
             println!("OK");
+        }
+
+        Commands::Forget {
+            storage,
+            keep_last,
+            dry_run,
+        } => {
+            let agent = open(&storage, BackupConfig::default(), false, false).await?;
+            let report = agent.forget(keep_last, dry_run).await?;
+            let verb = if dry_run { "Would remove" } else { "Removed" };
+            println!("Kept {} snapshot(s)", report.kept.len());
+            println!("{} {} snapshot(s)", verb, report.removed.len());
+            println!(
+                "{} {} unreferenced chunk(s); {} referenced",
+                if dry_run { "Would delete" } else { "Deleted" },
+                report.chunks_unreferenced,
+                report.chunks_referenced
+            );
+        }
+
+        Commands::Unlock { storage } => {
+            let agent = open(&storage, BackupConfig::default(), false, false).await?;
+            agent.unlock().await?;
+            println!("Lock removed (if one was held).");
         }
 
         Commands::Stats { storage } => {

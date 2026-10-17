@@ -30,7 +30,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Scorecard workflows. Dependabot. Release workflow with checksums, SBOM and
   build-provenance attestations.
 
+### Added (hardening)
+- Restore writes only through a capability handle rooted at the target (cap-std), so
+  a link created during the restore cannot redirect a write outside it.
+- Symbolic links are backed up and restored. Absolute or escaping targets are skipped
+  and counted.
+- Modification times and permissions are restored (setuid, setgid and sticky bits are
+  dropped).
+- `forget --keep-last N [--dry-run]` removes old snapshots and unreferenced chunks.
+  Every manifest is verified before anything is deleted.
+- `unlock` removes a stale repository lock. Backup and forget hold the lock.
+- Content-defined chunking uses FastCDC.
+- Property tests for the sealed-object format.
+
 ### Changed
+- The HTTP server and MCP server refuse to start unless `BACKUPFORGE_SERVER_ENABLE=1`
+  or `BACKUPFORGE_MCP_ENABLE=1` is set. Both are unfinished.
 - S3/B2 storage and the SSH, Proxmox, Docker, database and cloud-VM sources are
   behind off-by-default features; they are unfinished.
 - Planning documents moved to `docs/design-notes/`.

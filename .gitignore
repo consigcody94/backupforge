@@ -58,3 +58,6 @@ web-dashboard/.next/
 # OS
 Thumbs.db
 .Trash-*
+fuzz/target/
+fuzz/artifacts/
+fuzz/corpus/
