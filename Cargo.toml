@@ -45,7 +45,7 @@ zstd = "0.14"
 lz4 = "1.24"
 
 # Web framework
-axum = "0.7"
+axum = "0.8"
 tower = "0.5"
 tower-http = { version = "0.7", features = ["fs", "trace", "cors"] }
 
